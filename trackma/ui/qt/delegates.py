@@ -1,6 +1,7 @@
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtWidgets import QDoubleSpinBox, QStyle, QStyleOptionProgressBar, QStyledItemDelegate
 
+from trackma import utils
 from trackma.ui.qt.util import getColor
 
 MARGIN = 5
@@ -15,8 +16,14 @@ class AddListDelegate(QStyledItemDelegate):
     """ This is the delegate that handles the rendering of cards
     in the List View of the Add show dialog. """
 
-    def __init__(self, parent=None):
+    # Subtle highlight for a result already present in the user's list, so
+    # it's not confused with a brand new show (see also AddTableModel).
+    IN_LIST_COLOR = QtGui.QColor(210, 230, 255)
+
+    def __init__(self, parent=None, mylist=None, statuses_dict=None):
         self.results = None
+        self.mylist = mylist or {}
+        self.statuses_dict = statuses_dict or {}
 
         self.font = QtGui.QFont()
 
@@ -43,13 +50,19 @@ class AddListDelegate(QStyledItemDelegate):
         data = index.data()
         thumb = index.data(QtCore.Qt.ItemDataRole.DecorationRole)
 
+        mylist_entry = self.mylist.get(data.get('id'))
+        in_list_label = self.statuses_dict.get(
+            mylist_entry['my_status'], '?') if mylist_entry else None
+
         painter.save()
 
         color = index.data(QtCore.Qt.ItemDataRole.BackgroundRole)
 
-        # Draw background box
+        # Draw background box -- tinted if this show is already in the
+        # user's list, so it's not confused with a brand new result.
         painter.setPen(QtGui.QPen(self.alternatebasecolor))
-        painter.setBrush(QtGui.QBrush(self.windowcolor))
+        painter.setBrush(QtGui.QBrush(
+            self.IN_LIST_COLOR if mylist_entry else self.windowcolor))
         painter.drawRect(outerRect)
 
         # Prepare to draw inside
@@ -80,36 +93,41 @@ class AddListDelegate(QStyledItemDelegate):
         # Draw title
         painter.drawText(textRect, QtCore.Qt.AlignmentFlag.AlignVCenter, data['title'])
 
-        painter.setPen(QtGui.QPen(self.windowtextcolor))
+        # The highlight background is always light, so force dark text
+        # there regardless of the app's theme -- otherwise light-on-light
+        # text from a dark theme becomes unreadable.
+        detail_textcolor = QtGui.QColor(30, 30, 30) if mylist_entry else self.windowtextcolor
+        painter.setPen(QtGui.QPen(detail_textcolor))
 
         # Draw the details
         textRect.setHeight(self.fh)
         dataRect = textRect.adjusted(75, 0, 0, 0)
 
         textRect.translate(0, self.fh + 10)
-        painter.drawText(textRect, QtCore.Qt.AlignmentFlag.AlignTop, "Date")
+        painter.drawText(textRect, QtCore.Qt.AlignmentFlag.AlignTop, "Season")
+        textRect.translate(0, self.fh + 5)
+        painter.drawText(textRect, QtCore.Qt.AlignmentFlag.AlignTop, "Type")
         textRect.translate(0, self.fh + 5)
         painter.drawText(textRect, QtCore.Qt.AlignmentFlag.AlignTop, "Episodes")
+        if in_list_label:
+            textRect.translate(0, self.fh + 5)
+            painter.drawText(textRect, QtCore.Qt.AlignmentFlag.AlignTop, "In List")
 
         # Draw data
         painter.setFont(self.font)
 
-        # Dates
-        if data.get('start_date'):
-            d_from = data['start_date'].strftime('%d/%m/%y')
-        else:
-            d_from = '?'
-        if data.get('end_date'):
-            d_end = data['end_date'].strftime('%d/%m/%y')
-        else:
-            d_end = '?'
-
         dataRect.translate(0, self.fh + 10)
         painter.drawText(dataRect, QtCore.Qt.AlignmentFlag.AlignTop,
-                         "{} to {}".format(d_from, d_end))
+                         utils.get_season_label(data))
+        dataRect.translate(0, self.fh + 5)
+        painter.drawText(dataRect, QtCore.Qt.AlignmentFlag.AlignTop,
+                         str(data.get('type') or '?'))
         dataRect.translate(0, self.fh + 5)
         painter.drawText(dataRect, QtCore.Qt.AlignmentFlag.AlignTop,
                          str(data.get('total') or '?'))
+        if in_list_label:
+            dataRect.translate(0, self.fh + 5)
+            painter.drawText(dataRect, QtCore.Qt.AlignmentFlag.AlignTop, in_list_label)
 
         # Draw synopsis
         textRect.translate(0, self.fh + 5)
@@ -171,6 +189,10 @@ class ShowsTableDelegate(QStyledItemDelegate):
                 prog_options.maximum = maximum
                 prog_options.progress = value
                 prog_options.rect = rect
+                prog_options.palette = option.palette
+                prog_options.state = option.state
+                prog_options.direction = option.direction
+                prog_options.fontMetrics = option.fontMetrics
                 prog_options.text = '%d%%' % (value*100/maximum)
                 prog_options.textVisible = self._show_text
                 option.widget.style().drawControl(QStyle.ControlElement.CE_ProgressBar, prog_options, painter)
@@ -203,6 +225,10 @@ class ShowsTableDelegate(QStyledItemDelegate):
                 prog_options.maximum = maximum
                 prog_options.progress = value
                 prog_options.rect = rect
+                prog_options.palette = option.palette
+                prog_options.state = option.state
+                prog_options.direction = option.direction
+                prog_options.fontMetrics = option.fontMetrics
                 prog_options.text = '%d%%' % (value*100/maximum)
                 option.widget.style().drawControl(QStyle.ControlElement.CE_ProgressBar, prog_options, painter)
                 painter.setCompositionMode(

@@ -14,11 +14,14 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+import subprocess
+import sys
+
 from PyQt6 import QtCore
-from PyQt6.QtWidgets import (QAbstractItemView, QCheckBox, QColorDialog, QComboBox, QDialog, QDialogButtonBox,
-                             QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox, QLabel, QLineEdit, QListWidget,
-                             QListWidgetItem, QPushButton, QRadioButton, QScrollArea, QSpinBox, QSplitter,
-                             QStackedWidget, QTabWidget, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QColorDialog, QComboBox, QDialog,
+                             QDialogButtonBox, QFileDialog, QFormLayout, QFrame, QGridLayout, QGroupBox, QLabel,
+                             QLineEdit, QListWidget, QListWidgetItem, QMessageBox, QPushButton, QRadioButton,
+                             QScrollArea, QSpinBox, QSplitter, QStackedWidget, QTabWidget, QVBoxLayout, QWidget)
 
 from trackma import utils
 from trackma.ui.qt.delegates import ShowsTableDelegate
@@ -51,6 +54,8 @@ class SettingsDialog(QDialog):
             getIcon('folder'), 'Library', self.category_list)
         category_sync = QListWidgetItem(
             getIcon('view-refresh'), 'Sync', self.category_list)
+        category_behavior = QListWidgetItem(
+            getIcon('preferences-system'), 'Behavior', self.category_list)
         category_ui = QListWidgetItem(
             getIcon('window-new'), 'User Interface', self.category_list)
         category_theme = QListWidgetItem(
@@ -87,6 +92,11 @@ class SettingsDialog(QDialog):
         self.tracker_update_wait.setRange(0, 1000)
         self.tracker_update_wait.setMaximumWidth(60)
         self.tracker_update_close = QCheckBox()
+        self.mpris_obey_update_wait = QCheckBox()
+        self.mpris_obey_update_wait.setToolTip(
+            "When unchecked (MPRIS tracker only), updates at 80% of the "
+            "episode's actual duration -- reported by the player -- "
+            "instead of the fixed wait time above.")
         self.tracker_update_prompt = QCheckBox()
         self.tracker_not_found_prompt = QCheckBox()
         self.tracker_ignore_not_next = QCheckBox()
@@ -98,6 +108,8 @@ class SettingsDialog(QDialog):
         g_media_layout.addRow('Process name (regex)', self.tracker_process)
         g_media_layout.addRow(
             'Wait before updating (seconds)', self.tracker_update_wait)
+        g_media_layout.addRow(
+            'Use fixed wait above (MPRIS)', self.mpris_obey_update_wait)
         g_media_layout.addRow(
             'Wait until the player is closed', self.tracker_update_close)
         g_media_layout.addRow('Ask before updating',
@@ -337,6 +349,65 @@ class SettingsDialog(QDialog):
         page_sync_layout.addWidget(g_extra)
         page_sync.setLayout(page_sync_layout)
 
+        # Behavior tab
+        page_behavior = QWidget()
+        page_behavior_layout = QVBoxLayout()
+        page_behavior_layout.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+
+        # Group: Adding shows
+        g_add_dialog = QGroupBox('Adding shows')
+        g_add_dialog.setFlat(True)
+        self.add_dialog_default_status = QComboBox()
+        self.add_dialog_default_status.addItem(
+            'Currently active tab', 'current')
+        self.add_dialog_default_status.addItem(
+            'Plan to Watch', 'start')
+        g_add_dialog_layout = QFormLayout()
+        g_add_dialog_layout.addRow(
+            'Default status when adding a show:', self.add_dialog_default_status)
+        g_add_dialog.setLayout(g_add_dialog_layout)
+
+        page_behavior_layout.addWidget(g_add_dialog)
+
+        # Group: Apply behavior
+        g_apply = QGroupBox('Apply behavior')
+        g_apply.setFlat(True)
+        self.sync_on_settings_apply = QCheckBox(
+            'Push a sync when applying settings')
+        g_apply_layout = QVBoxLayout()
+        g_apply_layout.addWidget(self.sync_on_settings_apply)
+        g_apply.setLayout(g_apply_layout)
+
+        page_behavior_layout.addWidget(g_apply)
+
+        # Group: Taiga Mode
+        g_taiga = QGroupBox('Taiga Mode')
+        g_taiga.setFlat(True)
+        self.taiga_mode = QCheckBox(
+            'Emulate Taiga\'s look (Qt only, requires restart)')
+        g_taiga_layout = QVBoxLayout()
+        g_taiga_layout.addWidget(self.taiga_mode)
+        g_taiga.setLayout(g_taiga_layout)
+
+        page_behavior_layout.addWidget(g_taiga)
+
+        # Group: Kitsu
+        g_kitsu = QGroupBox('Kitsu')
+        g_kitsu.setFlat(True)
+        self.kitsu_api = QComboBox()
+        self.kitsu_api.addItem('Legacy (REST)', 'legacy')
+        self.kitsu_api.addItem('New (GraphQL)', 'graphql')
+        self.kitsu_api.setToolTip(
+            'Which Kitsu API to use for Kitsu accounts. Takes effect the '
+            'next time the account is loaded. Both use the same Kitsu '
+            'login.')
+        g_kitsu_layout = QFormLayout()
+        g_kitsu_layout.addRow('Kitsu API:', self.kitsu_api)
+        g_kitsu.setLayout(g_kitsu_layout)
+
+        page_behavior_layout.addWidget(g_kitsu)
+        page_behavior.setLayout(page_behavior_layout)
+
         # UI tab
         page_ui = QWidget()
         page_ui_layout = QFormLayout()
@@ -388,10 +459,25 @@ class SettingsDialog(QDialog):
         g_lists_layout.addRow(self.inline_edit)
         g_lists.setLayout(g_lists_layout)
 
+        # Group: MAL Scores
+        g_mal_scores = QGroupBox('MAL Scores')
+        g_mal_scores.setFlat(True)
+        self.add_mal_scores = QCheckBox(
+            'Add MAL Scores (must be signed into MAL)')
+        self.add_mal_scores.setToolTip(
+            "Automatically cross-references MyAnimeList's community score "
+            "for shows on your list after every sync, using a MyAnimeList "
+            "account added in trackma. Not needed if this account already "
+            "is MyAnimeList.")
+        g_mal_scores_layout = QVBoxLayout()
+        g_mal_scores_layout.addWidget(self.add_mal_scores)
+        g_mal_scores.setLayout(g_mal_scores_layout)
+
         # UI layout
         page_ui_layout.addWidget(g_icon)
         page_ui_layout.addWidget(g_window)
         page_ui_layout.addWidget(g_lists)
+        page_ui_layout.addWidget(g_mal_scores)
         page_ui.setLayout(page_ui_layout)
 
         # Theming tab
@@ -465,7 +551,7 @@ class SettingsDialog(QDialog):
 
         # Content
         self.contents = QStackedWidget()
-        for page in (page_media, page_library, page_sync, page_ui, page_theme):
+        for page in (page_media, page_library, page_sync, page_behavior, page_ui, page_theme):
             scrollable_page = QScrollArea()
             scrollable_page.setWidgetResizable(True)
             scrollable_page.setWidget(page)
@@ -510,6 +596,8 @@ class SettingsDialog(QDialog):
         self.tracker_process.setText(engine.get_config('tracker_process'))
         self.tracker_update_wait.setValue(
             engine.get_config('tracker_update_wait_s'))
+        self.mpris_obey_update_wait.setChecked(
+            engine.get_config('mpris_obey_update_wait_s'))
         self.tracker_update_close.setChecked(
             engine.get_config('tracker_update_close'))
         self.tracker_update_prompt.setChecked(
@@ -578,6 +666,17 @@ class SettingsDialog(QDialog):
         self.auto_status_change_if_scored.setChecked(
             engine.get_config('auto_status_change_if_scored'))
         self.auto_date_change.setChecked(engine.get_config('auto_date_change'))
+        self.add_mal_scores.setChecked(engine.get_config('auto_add_mal_scores'))
+
+        self.add_dialog_default_status.setCurrentIndex(
+            max(0, self.add_dialog_default_status.findData(
+                engine.get_config('add_dialog_default_status'))))
+
+        self.sync_on_settings_apply.setChecked(
+            engine.get_config('sync_on_settings_apply'))
+
+        self.kitsu_api.setCurrentIndex(
+            max(0, self.kitsu_api.findData(engine.get_config('kitsu_api'))))
 
         self.tray_icon.setChecked(self.config['show_tray'])
         self.close_to_tray.setChecked(self.config['close_to_tray'])
@@ -590,6 +689,7 @@ class SettingsDialog(QDialog):
         self.filter_bar_position.setCurrentIndex(
             self.filter_bar_position.findData(self.config['filter_bar_position']))
         self.inline_edit.setChecked(self.config['inline_edit'])
+        self.taiga_mode.setChecked(self.config['taiga_mode'])
 
         self.ep_bar_style.setCurrentIndex(
             self.ep_bar_style.findData(self.config['episodebar_style']))
@@ -608,6 +708,7 @@ class SettingsDialog(QDialog):
 
     def _save(self):
         engine = self.worker.engine
+        old_taiga_mode = self.config['taiga_mode']
 
         engine.set_config('tracker_enabled',
                           self.tracker_enabled.isChecked())
@@ -619,6 +720,8 @@ class SettingsDialog(QDialog):
             self.tracker_process.text()))
         engine.set_config('tracker_update_wait_s',
                           self.tracker_update_wait.value())
+        engine.set_config('mpris_obey_update_wait_s',
+                          self.mpris_obey_update_wait.isChecked())
         engine.set_config('tracker_update_close',
                           self.tracker_update_close.isChecked())
         engine.set_config('tracker_update_prompt',
@@ -690,6 +793,18 @@ class SettingsDialog(QDialog):
                           self.auto_status_change_if_scored.isChecked())
         engine.set_config('auto_date_change',
                           self.auto_date_change.isChecked())
+        engine.set_config('auto_add_mal_scores',
+                          self.add_mal_scores.isChecked())
+
+        engine.set_config('add_dialog_default_status',
+                          self.add_dialog_default_status.itemData(
+                              self.add_dialog_default_status.currentIndex()))
+
+        engine.set_config('sync_on_settings_apply',
+                          self.sync_on_settings_apply.isChecked())
+
+        engine.set_config('kitsu_api',
+                          self.kitsu_api.itemData(self.kitsu_api.currentIndex()))
 
         engine.save_config()
 
@@ -711,9 +826,29 @@ class SettingsDialog(QDialog):
 
         self.config['colors'] = self.color_values
 
+        self.config['taiga_mode'] = self.taiga_mode.isChecked()
+
         utils.save_config(self.config, self.configfile)
 
         self.saved.emit()
+
+        if self.config['taiga_mode'] != old_taiga_mode:
+            self._prompt_restart()
+
+    def _prompt_restart(self):
+        box = QMessageBox(self)
+        box.setIcon(QMessageBox.Icon.Information)
+        box.setWindowTitle('Restart required')
+        box.setText(
+            'Taiga Mode takes effect after restarting Trackma.')
+        restart_btn = box.addButton(
+            'Restart Now', QMessageBox.ButtonRole.AcceptRole)
+        box.addButton('Later', QMessageBox.ButtonRole.RejectRole)
+        box.exec()
+
+        if box.clickedButton() is restart_btn:
+            subprocess.Popen([sys.executable] + sys.argv)
+            QApplication.instance().quit()
 
     def s_save(self):
         self._save()

@@ -20,7 +20,7 @@ import os
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QAction, QActionGroup
 from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox,
-                             QDoubleSpinBox, QFormLayout, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit,
+                             QFormLayout, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit,
                              QMainWindow, QMenu, QMessageBox, QProgressBar, QPushButton, QSpinBox, QStyle,
                              QStyleOptionButton, QSystemTrayIcon, QTabBar, QToolButton, QVBoxLayout, QWidget)
 
@@ -29,10 +29,11 @@ from trackma import utils
 from trackma.accounts import AccountManager
 from trackma.ui.qt.accounts import AccountDialog
 from trackma.ui.qt.add import AddDialog
+from trackma.ui.qt.airing import AiringScheduleDialog
 from trackma.ui.qt.details import DetailsDialog
 from trackma.ui.qt.settings import SettingsDialog
 from trackma.ui.qt.util import FilterBar, getIcon
-from trackma.ui.qt.widgets import ShowsTableView
+from trackma.ui.qt.widgets import HoverProgressBar, ScoreSlider, ShowsTableView
 from trackma.ui.qt.workers import EngineWorker, ImageWorker
 
 class MainWindow(QMainWindow):
@@ -63,11 +64,12 @@ class MainWindow(QMainWindow):
         self.config = utils.parse_config(self.configfile, utils.qt_defaults)
 
         # Build UI
+        self.app_name = 'Hakubun-qt'
         if os.name != "nt":
             QApplication.setWindowIcon(QtGui.QIcon(utils.DATADIR + '/icon.png'))
         else:
             QApplication.setWindowIcon(QtGui.QIcon(utils.DATADIR + '/icon.ico'))
-        self.setWindowTitle('Trackma-qt')
+        self.setWindowTitle(self.app_name)
 
         self.accountman = AccountManager()
 
@@ -143,9 +145,14 @@ class MainWindow(QMainWindow):
         action_play_random.setShortcut('Ctrl+R')
         action_play_random.triggered.connect(self.s_play_random)
         self.action_add = QAction(
-            getIcon('edit-find'), 'Search/Add from Remote', self)
+            getIcon('edit-find'), 'Search', self)
         self.action_add.setShortcut('Ctrl+A')
         self.action_add.triggered.connect(self.s_add)
+        self.action_airing_schedule = QAction(
+            getIcon('view-calendar'), 'Airing Schedule', self)
+        self.action_airing_schedule.setStatusTip(
+            'See when the airing shows in your list air next.')
+        self.action_airing_schedule.triggered.connect(self.s_airing_schedule)
         self.action_delete = QAction(getIcon('edit-delete'), '&Delete', self)
         self.action_delete.setStatusTip('Remove this show from your list.')
         self.action_delete.setShortcut(QtCore.Qt.Key.Key_Delete)
@@ -155,7 +162,18 @@ class MainWindow(QMainWindow):
         action_quit.setStatusTip('Exit Trackma.')
         action_quit.triggered.connect(self._exit)
 
-        self.action_sync = QAction('&Sync', self)
+        self.action_undo = QAction(getIcon('edit-undo'), '&Undo', self)
+        self.action_undo.setStatusTip('Undo the last episode/score/status/tags change.')
+        self.action_undo.setShortcut('Ctrl+Z')
+        self.action_undo.setEnabled(False)
+        self.action_undo.triggered.connect(self.s_undo)
+        self.action_redo = QAction(getIcon('edit-redo'), '&Redo', self)
+        self.action_redo.setStatusTip('Redo the last undone change.')
+        self.action_redo.setShortcuts(['Ctrl+Shift+Z', 'Ctrl+Y'])
+        self.action_redo.setEnabled(False)
+        self.action_redo.triggered.connect(self.s_redo)
+
+        self.action_sync = QAction(getIcon('view-refresh'), '&Sync', self)
         self.action_sync.setStatusTip(
             'Send changes and then retrieve remote list')
         self.action_sync.setShortcut('Ctrl+S')
@@ -170,10 +188,12 @@ class MainWindow(QMainWindow):
         self.action_retrieve.setStatusTip(
             'Discard any changes made to the list and re-download it.')
         self.action_retrieve.triggered.connect(self.s_retrieve)
-        action_scan_library = QAction('Rescan &Library (quick)', self)
+        action_scan_library = self.action_scan_library = QAction(
+            'Rescan &Library (quick)', self)
         action_scan_library.setShortcut('Ctrl+L')
         action_scan_library.triggered.connect(self.s_scan_library)
-        action_rescan_library = QAction('Rescan &Library (full)', self)
+        action_rescan_library = self.action_rescan_library = QAction(
+            'Rescan &Library (full)', self)
         action_rescan_library.triggered.connect(self.s_rescan_library)
         action_open_folder = QAction('Open containing folder', self)
         action_open_folder.triggered.connect(self.s_open_folder)
@@ -181,7 +201,7 @@ class MainWindow(QMainWindow):
         self.action_reload = QAction('Switch &Account', self)
         self.action_reload.setStatusTip('Switch to a different account.')
         self.action_reload.triggered.connect(self.s_switch_account)
-        action_settings = QAction('&Settings...', self)
+        action_settings = QAction(getIcon('preferences-system'), '&Settings...', self)
         action_settings.triggered.connect(self.s_settings)
 
         action_about = QAction(getIcon('help-about'), 'About...', self)
@@ -190,25 +210,101 @@ class MainWindow(QMainWindow):
         action_about_qt.triggered.connect(self.s_about_qt)
 
         menubar = self.menuBar()
-        self.menu_show = menubar.addMenu('&Show')
-        self.menu_show.addAction(self.action_play_next)
-        self.menu_show.addAction(self.action_play_dialog)
-        self.menu_show.addAction(self.action_details)
-        self.menu_show.addAction(self.action_altname)
-        self.menu_show.addSeparator()
-        self.menu_show.addAction(action_play_random)
-        self.menu_show.addSeparator()
-        self.menu_show.addAction(self.action_add)
-        self.menu_show.addAction(self.action_delete)
-        self.menu_show.addSeparator()
-        self.menu_show.addAction(action_quit)
+
+        if self.config['taiga_mode']:
+            # Taiga's own menu bar/toolbar are much simpler than
+            # Trackma's -- File/Services/Tools/Help instead of
+            # Show/List/Mediatype/Options/Help. Actions that don't have
+            # a natural home in that structure (undo/redo, rescan,
+            # mediatype switch, switch account) stay reachable via
+            # File > Library folders or their existing shortcuts rather
+            # than disappearing outright.
+            self.menu_library_folders = QMenu('Library folders', self)
+            self.menu_mediatype = QMenu('Mediatype', self)
+            self.mediatype_actiongroup = QActionGroup(self)
+            self.mediatype_actiongroup.setExclusive(True)
+            self.mediatype_actiongroup.triggered.connect(self.s_mediatype)
+
+            menu_file = menubar.addMenu('&File')
+            menu_file.addMenu(self.menu_library_folders)
+            menu_file.addMenu(self.menu_mediatype)
+            menu_file.addAction(action_play_random)
+            menu_file.addSeparator()
+            menu_file.addAction(self.action_reload)
+            menu_file.addSeparator()
+            menu_file.addAction(action_quit)
+
+            self.menu_services = menubar.addMenu('&Services')
+            self.menu_services.addAction(self.action_sync)
+            self.menu_services.addSeparator()
+            # The per-service section (profile/stats/history links) is
+            # built in _rebuild_services_menu() once the active
+            # account's API and username are known.
+
+            menu_tools = menubar.addMenu('&Tools')
+            menu_tools.addAction(self.action_altname)
+            menu_tools.addAction(self.action_add)
+            menu_tools.addAction(self.action_airing_schedule)
+
+            menu_help = menubar.addMenu('&Help')
+            menu_help.addAction(action_about)
+            menu_help.addAction(action_about_qt)
+
+            # Keep these working by shortcut even with no menu entry.
+            for action in (self.action_undo, self.action_redo,
+                          action_scan_library, action_rescan_library):
+                self.addAction(action)
+
+            toolbar = self.addToolBar('Main')
+            toolbar.setMovable(False)
+            toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            toolbar.addAction(self.action_sync)
+            self.library_folders_btn = QToolButton()
+            self.library_folders_btn.setText('Library folders')
+            self.library_folders_btn.setMenu(self.menu_library_folders)
+            self.library_folders_btn.setPopupMode(
+                QToolButton.ToolButtonPopupMode.InstantPopup)
+            toolbar.addWidget(self.library_folders_btn)
+            toolbar.addAction(action_settings)
+        else:
+            self.menu_show = menubar.addMenu('&Show')
+            self.menu_show.addAction(self.action_play_next)
+            self.menu_show.addAction(self.action_play_dialog)
+            self.menu_show.addAction(self.action_details)
+            self.menu_show.addAction(self.action_altname)
+            self.menu_show.addSeparator()
+            self.menu_show.addAction(action_play_random)
+            self.menu_show.addSeparator()
+            self.menu_show.addAction(self.action_add)
+            self.menu_show.addAction(self.action_airing_schedule)
+            self.menu_show.addAction(self.action_delete)
+            self.menu_show.addSeparator()
+            self.menu_show.addAction(action_quit)
+
+            # Search, Sync, and Settings are common enough to need more
+            # than a buried menu item.
+            toolbar = self.addToolBar('Main')
+            toolbar.setMovable(False)
+            toolbar.setToolButtonStyle(QtCore.Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+            toolbar.addAction(self.action_add)
+            toolbar.addAction(self.action_airing_schedule)
+            toolbar.addAction(self.action_sync)
+            toolbar.addSeparator()
+            toolbar.addAction(self.action_undo)
+            toolbar.addAction(self.action_redo)
+            toolbar.addSeparator()
+            toolbar.addAction(action_settings)
 
         self.menu_play = QMenu('Play')
+        # Populated per-account in _rebuild_statuses(), once the API's
+        # statuses are known.
+        self.menu_move_to = QMenu('Move to', self)
 
         # Context menu for right click on list item
         self.menu_show_context = QMenu()
         self.menu_show_context.addMenu(self.menu_play)
         self.menu_show_context.addAction(self.action_details)
+        self.menu_show_context.addMenu(self.menu_move_to)
         self.menu_show_context.addAction(action_open_folder)
         self.menu_show_context.addAction(self.action_altname)
         self.menu_show_context.addSeparator()
@@ -230,25 +326,29 @@ class MainWindow(QMainWindow):
             self.ep_icons[key] = QtGui.QIcon(buffer)
             painter.end()
 
-        menu_list = menubar.addMenu('&List')
-        menu_list.addAction(self.action_sync)
-        menu_list.addSeparator()
-        menu_list.addAction(self.action_send)
-        menu_list.addAction(self.action_retrieve)
-        menu_list.addSeparator()
-        menu_list.addAction(action_scan_library)
-        menu_list.addAction(action_rescan_library)
-        self.menu_mediatype = menubar.addMenu('&Mediatype')
-        self.mediatype_actiongroup = QActionGroup(self)
-        self.mediatype_actiongroup.setExclusive(True)
-        self.mediatype_actiongroup.triggered.connect(self.s_mediatype)
-        menu_options = menubar.addMenu('&Options')
-        menu_options.addAction(self.action_reload)
-        menu_options.addSeparator()
-        menu_options.addAction(action_settings)
-        menu_help = menubar.addMenu('&Help')
-        menu_help.addAction(action_about)
-        menu_help.addAction(action_about_qt)
+        if not self.config['taiga_mode']:
+            menu_list = menubar.addMenu('&List')
+            menu_list.addAction(self.action_undo)
+            menu_list.addAction(self.action_redo)
+            menu_list.addSeparator()
+            menu_list.addAction(self.action_sync)
+            menu_list.addSeparator()
+            menu_list.addAction(self.action_send)
+            menu_list.addAction(self.action_retrieve)
+            menu_list.addSeparator()
+            menu_list.addAction(action_scan_library)
+            menu_list.addAction(action_rescan_library)
+            self.menu_mediatype = menubar.addMenu('&Mediatype')
+            self.mediatype_actiongroup = QActionGroup(self)
+            self.mediatype_actiongroup.setExclusive(True)
+            self.mediatype_actiongroup.triggered.connect(self.s_mediatype)
+            menu_options = menubar.addMenu('&Options')
+            menu_options.addAction(self.action_reload)
+            menu_options.addSeparator()
+            menu_options.addAction(action_settings)
+            menu_help = menubar.addMenu('&Help')
+            menu_help.addAction(action_about)
+            menu_help.addAction(action_about_qt)
 
         # Build layout
         main_layout = QVBoxLayout()
@@ -260,7 +360,7 @@ class MainWindow(QMainWindow):
         left_box = QFormLayout()
         small_btns_hbox = QHBoxLayout()
 
-        self.show_title = QLabel('Trackma-qt')
+        self.show_title = QLabel(self.app_name)
         show_title_font = QtGui.QFont()
         show_title_font.setBold(True)
         show_title_font.setPointSize(12)
@@ -305,7 +405,11 @@ class MainWindow(QMainWindow):
                             'my_start': 8,
                             'my_end': 9,
                             'tag': 10,
-                            'my_last_update': 12}
+                            'my_last_update': 12,
+                            'season': 13,
+                            'type': 14,
+                            'platform_score': 15,
+                            'mal_score': 16}
 
         for i, column_name in enumerate(self.view.model().sourceModel().columns):
             action = QAction(column_name, self, checkable=True)
@@ -320,6 +424,11 @@ class MainWindow(QMainWindow):
         self.show_filter = QLineEdit()
         self.show_filter.setClearButtonEnabled(True)
         self.show_filter.textChanged.connect(self.s_filter_changed)
+        if self.config['taiga_mode']:
+            # Taiga's search bar filters the current list as you type,
+            # but Enter jumps straight to a full remote search/add.
+            self.show_filter.returnPressed.connect(
+                lambda: self.s_add(self.show_filter.text().strip() or None))
         filter_tooltip = (
             "General Search: All fields (columns) of each show will be matched against the search term."
             "\nAdvanced Searching: A field can be specified by using its key followed by a colon"
@@ -345,14 +454,17 @@ class MainWindow(QMainWindow):
             self.resize(740, 480)
 
         spinbox_width = 75
-        self.show_image = QLabel('Trackma-qt')
+        self.show_image = QLabel(self.app_name)
         self.show_image.setFixedHeight(149)
         self.show_image.setMinimumWidth(100)
         self.show_image.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         show_progress_label = QLabel('Progress:')
         self.show_progress = QSpinBox()
         self.show_progress.setMinimumWidth(spinbox_width)
-        self.show_progress_bar = QProgressBar()
+        # Taiga mode overlays the +/- controls on the bar itself
+        # (revealed on hover) instead of using separate buttons beside it.
+        self.show_progress_bar = (
+            HoverProgressBar() if self.config['taiga_mode'] else QProgressBar())
         self.show_progress_btn = QPushButton('Update')
         self.show_progress_btn.setToolTip(
             'Set number of episodes watched to the value entered above')
@@ -363,22 +475,33 @@ class MainWindow(QMainWindow):
             'Play the next unwatched episode\nHold to play other episodes')
         self.show_play_btn.clicked.connect(lambda: self.s_play(True))
         self.show_play_btn.setMenu(self.menu_play)
-        self.show_inc_btn = QToolButton()
-        self.show_inc_btn.setIcon(getIcon('list-add'))
+        self.show_play_btn.setPopupMode(
+            QToolButton.ToolButtonPopupMode.MenuButtonPopup)
+
+        if self.config['taiga_mode']:
+            self.show_inc_btn = self.show_progress_bar.inc_btn
+            self.show_dec_btn = self.show_progress_bar.dec_btn
+            self.show_progress_bar.incremented.connect(self.s_plus_episode)
+            self.show_progress_bar.decremented.connect(self.s_rem_episode)
+        else:
+            self.show_inc_btn = QToolButton()
+            self.show_inc_btn.setIcon(getIcon('list-add'))
+            self.show_inc_btn.clicked.connect(self.s_plus_episode)
+            self.show_dec_btn = QToolButton()
+            self.show_dec_btn.setIcon(getIcon('list-remove'))
+            self.show_dec_btn.clicked.connect(self.s_rem_episode)
+
         self.show_inc_btn.setShortcut('Ctrl+Right')
         self.show_inc_btn.setToolTip('Increment number of episodes watched')
-        self.show_inc_btn.clicked.connect(self.s_plus_episode)
-        self.show_dec_btn = QToolButton()
-        self.show_dec_btn.setIcon(getIcon('list-remove'))
-        self.show_dec_btn.clicked.connect(self.s_rem_episode)
         self.show_dec_btn.setShortcut('Ctrl+Left')
         self.show_dec_btn.setToolTip('Decrement number of episodes watched')
         show_score_label = QLabel('Score:')
-        self.show_score = QDoubleSpinBox()
-        self.show_score.setMinimumWidth(spinbox_width)
+        self.show_score = ScoreSlider()
+        self.show_score.setMinimumWidth(220)
         self.show_score_btn = QPushButton('Set')
         self.show_score_btn.setToolTip('Set score to the value entered above')
         self.show_score_btn.clicked.connect(self.s_set_score)
+        self.show_score.add_extra_widget(self.show_score_btn)
         self.show_tags_btn = QPushButton('Edit Tags...')
         self.show_tags_btn.setToolTip(
             'Open a dialog to edit your tags for this show')
@@ -387,20 +510,51 @@ class MainWindow(QMainWindow):
         self.show_status.setToolTip('Change your watching status of this show')
         self.show_status.currentIndexChanged.connect(self.s_set_status)
 
-        small_btns_hbox.addWidget(self.show_dec_btn)
-        small_btns_hbox.addWidget(self.show_play_btn)
-        small_btns_hbox.addWidget(self.show_inc_btn)
-        small_btns_hbox.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-
         left_box.addRow(self.show_image)
-        left_box.addRow(self.show_progress_bar)
-        left_box.addRow(small_btns_hbox)
-        left_box.addRow(show_progress_label)
-        left_box.addRow(self.show_progress, self.show_progress_btn)
-        left_box.addRow(show_score_label)
-        left_box.addRow(self.show_score, self.show_score_btn)
-        left_box.addRow(self.show_status)
-        left_box.addRow(self.show_tags_btn)
+
+        if self.config['taiga_mode']:
+            # Taiga's sidebar only shows the picture, the mode caption,
+            # and whatever's playing (progress + play controls). Every
+            # other editing control (progress spinbox, score, status,
+            # tags) moves into a second "Edit" tab in the Details
+            # dialog instead -- see s_show_details().
+            self.taiga_mode_label = QLabel('Taiga Mode')
+            self.taiga_mode_label.setAlignment(
+                QtCore.Qt.AlignmentFlag.AlignCenter)
+            left_box.addRow(self.taiga_mode_label)
+
+            # show_dec_btn/show_inc_btn are already overlaid on the bar
+            # itself (see HoverProgressBar) -- just add the bar.
+            left_box.addRow(self.show_progress_bar)
+
+            small_btns_hbox.addWidget(self.show_play_btn)
+            small_btns_hbox.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            left_box.addRow(small_btns_hbox)
+
+            edit_form = QFormLayout()
+            edit_form.addRow(show_progress_label)
+            edit_form.addRow(self.show_progress, self.show_progress_btn)
+            edit_form.addRow(show_score_label)
+            edit_form.addRow(self.show_score)
+            edit_form.addRow(self.show_status)
+            edit_form.addRow(self.show_tags_btn)
+            self.taiga_edit_widget = QWidget()
+            self.taiga_edit_widget.setLayout(edit_form)
+        else:
+            small_btns_hbox.addWidget(self.show_dec_btn)
+            small_btns_hbox.addWidget(self.show_play_btn)
+            small_btns_hbox.addWidget(self.show_inc_btn)
+            small_btns_hbox.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+
+            left_box.addRow(self.show_progress_bar)
+            left_box.addRow(small_btns_hbox)
+
+            left_box.addRow(show_progress_label)
+            left_box.addRow(self.show_progress, self.show_progress_btn)
+            left_box.addRow(show_score_label)
+            left_box.addRow(self.show_score)
+            left_box.addRow(self.show_status)
+            left_box.addRow(self.show_tags_btn)
 
         filter_bar_box_layout.addWidget(QLabel('Filter:'))
         filter_bar_box_layout.addWidget(self.show_filter)
@@ -434,7 +588,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.main_widget)
 
         # Statusbar
-        self.status_text = QLabel('Trackma-qt')
+        self.status_text = QLabel(self.app_name)
         self.tracker_text = QLabel('Tracker: N/A')
         self.tracker_text.setMinimumWidth(120)
         self.queue_text = QLabel('Unsynced items: N/A')
@@ -466,6 +620,7 @@ class MainWindow(QMainWindow):
         self.worker.playing_show.connect(self.ws_changed_show)
         self.worker.prompt_for_update.connect(self.ws_prompt_update)
         self.worker.prompt_for_add.connect(self.ws_prompt_add)
+        self.worker.undo_stack_changed.connect(self.ws_undo_stack_changed)
 
         # Show main window
         if not (self.config['show_tray'] and self.config['start_in_tray']):
@@ -574,6 +729,7 @@ class MainWindow(QMainWindow):
         self._enable_show_widgets(bool(self.selected_show_id and enable))
 
         self.action_add.setEnabled(enable)
+        self.action_airing_schedule.setEnabled(enable)
         self.action_sync.setEnabled(enable)
         self.action_send.setEnabled(enable)
         self.action_retrieve.setEnabled(enable)
@@ -629,6 +785,10 @@ class MainWindow(QMainWindow):
         self._apply_tray()
         self._apply_filter_bar()
         # TODO: Reload listviews?
+        if self.config['taiga_mode']:
+            self._rebuild_library_folders_menu()
+        if self.config['sync_on_settings_apply']:
+            self.s_send(False)
 
     def _apply_view(self):
         if self.config['inline_edit']:
@@ -684,6 +844,7 @@ class MainWindow(QMainWindow):
         self.notebook.blockSignals(True)
 
         self.show_status.clear()
+        self.menu_move_to.clear()
 
         # Clear notebook
         while self.notebook.count() > 0:
@@ -698,10 +859,71 @@ class MainWindow(QMainWindow):
 
             self.show_status.addItem(name)
 
+            action = self.menu_move_to.addAction(name)
+            action.triggered.connect(
+                lambda checked=False, s=status: self._set_show_status_from_menu(s))
+
         self.notebook.addTab("All")
 
         self.show_status.blockSignals(False)
         self.notebook.blockSignals(False)
+
+    def _rebuild_library_folders_menu(self):
+        self.menu_library_folders.clear()
+        self.menu_library_folders.addAction(self.action_scan_library)
+        self.menu_library_folders.addAction(self.action_rescan_library)
+        self.menu_library_folders.addSeparator()
+
+        folders = self.worker.engine.get_config('searchdir')
+        if not folders:
+            empty = self.menu_library_folders.addAction('(no folders configured)')
+            empty.setEnabled(False)
+            return
+
+        for folder in folders:
+            action = self.menu_library_folders.addAction(folder)
+            action.triggered.connect(
+                lambda checked=False, f=folder: utils.open_folder(f))
+
+    def _rebuild_services_menu(self):
+        # Trim back to the "Sync lists" action + separator built in
+        # start(); everything after that is the per-service section,
+        # rebuilt here once the active account's API/username are known.
+        for action in self.menu_services.actions()[2:]:
+            self.menu_services.removeAction(action)
+
+        api = self.account['api']
+        username = self.worker.engine.get_userconfig('username')
+        if not username:
+            return
+
+        sections = {
+            'anilist': [
+                ('Go to my Profile', 'https://anilist.co/user/%s' % username),
+                ('Stats', 'https://anilist.co/user/%s/stats' % username),
+            ],
+            'kitsu': [
+                ('Go to my library', 'https://kitsu.app/users/%s/library' % username),
+                ('Go to my Profile', 'https://kitsu.app/users/%s' % username),
+            ],
+            'mal': [
+                ('Go to my Profile', 'https://myanimelist.net/profile/%s' % username),
+                ('Go to my History', 'https://myanimelist.net/history/%s' % username),
+            ],
+        }
+
+        entries = sections.get(api)
+        if not entries:
+            return
+
+        for label, url in entries:
+            action = self.menu_services.addAction(label)
+            action.triggered.connect(
+                lambda checked=False, u=url: QtGui.QDesktopServices.openUrl(QtCore.QUrl(u)))
+
+    def _set_show_status_from_menu(self, status):
+        if self.selected_show_id:
+            self._set_show_status(self.selected_show_id, status)
 
     def _recalculate_counts(self):
         showlist = self.worker.engine.get_list()
@@ -737,14 +959,7 @@ class MainWindow(QMainWindow):
         library = self.worker.engine.library()
 
         # Set allowed ranges (this will be reported by the engine later)
-        decimal_places = 0
-        if isinstance(self.mediainfo['score_step'], float):
-            decimal_places = len(
-                str(self.mediainfo['score_step']).split('.')[1])
-
-        self.show_score.setRange(0, self.mediainfo['score_max'])
-        self.show_score.setDecimals(decimal_places)
-        self.show_score.setSingleStep(self.mediainfo['score_step'])
+        self.show_score.setMediaInfo(self.mediainfo)
 
         # Get the new list and pass it to our model
         self.view.setSortingEnabled(False)
@@ -787,8 +1002,8 @@ class MainWindow(QMainWindow):
         if not show:
             self.selected_show_id = None
 
-            self.show_title.setText('Trackma-qt')
-            self.show_image.setText('Trackma-qt')
+            self.show_title.setText(self.app_name)
+            self.show_image.setText(self.app_name)
             self.show_progress.setValue(0)
             self.show_score.setValue(0)
             self.show_progress_bar.setValue(0)
@@ -803,7 +1018,8 @@ class MainWindow(QMainWindow):
         # Set proper ranges
         if show['total']:
             self.show_progress.setMaximum(show['total'])
-            self.show_progress_bar.setFormat('%v/%m')
+            self.show_progress_bar.setFormat(
+                '%p%' if self.config['taiga_mode'] else '%v/%m')
             self.show_progress_bar.setMaximum(show['total'])
             # Regenerate Play Episode Menu
             self.generate_episode_menus(
@@ -886,6 +1102,12 @@ class MainWindow(QMainWindow):
         if max_eps < 1 or max_eps > breakpoint_no_menus:
             menu.addAction(action_play_dialog)
             return menu
+
+        if max_eps > 60:
+            # Typing a number beats digging through nested submenus once a
+            # show has this many episodes.
+            menu.addAction(action_play_dialog)
+
         menu.addSeparator()
 
         ep_actions = []
@@ -1090,15 +1312,26 @@ class MainWindow(QMainWindow):
         if not showid:
             showid = self.selected_show_id
         if score is None:
-            score = round(self.show_score.value(), self.show_score.decimals())
+            score = self.show_score.value()
 
         self.worker_call('set_score', self.r_generic, showid, score)
 
     def s_set_status(self, index):
         if self.selected_show_id:
-            self._busy(True)
-            self.worker_call('set_status', self.r_generic,
-                             self.selected_show_id, self.mediainfo['statuses'][index])
+            self._set_show_status(
+                self.selected_show_id, self.mediainfo['statuses'][index])
+
+    def _set_show_status(self, showid, status):
+        self._busy(True)
+        self.worker_call('set_status', self.r_generic, showid, status)
+
+    def s_undo(self):
+        self._busy(True)
+        self.worker_call('undo', self.r_generic)
+
+    def s_redo(self):
+        self._busy(True)
+        self.worker_call('redo', self.r_generic)
 
     def s_set_tags(self):
         show = self.worker.engine.get_show_info(self.selected_show_id)
@@ -1229,16 +1462,26 @@ class MainWindow(QMainWindow):
 
         show = self.worker.engine.get_show_info(self.selected_show_id)
 
-        self.detailswindow = DetailsDialog(None, self.worker, show)
+        edit_widget = self.taiga_edit_widget if self.config['taiga_mode'] else None
+        self.detailswindow = DetailsDialog(
+            None, self.worker, show, edit_widget=edit_widget)
         self.detailswindow.setModal(True)
         self.detailswindow.show()
 
-    def s_add(self):
+    def s_add(self, query=None):
         current_status = self.notebook.tabData(self.notebook.currentIndex())
 
-        self.addwindow = AddDialog(None, self.worker, current_status)
+        self.addwindow = AddDialog(
+            None, self.worker, current_status, default=query or None)
         self.addwindow.setModal(True)
         self.addwindow.show()
+        if query:
+            self.addwindow.s_search()
+
+    def s_airing_schedule(self):
+        self.airingwindow = AiringScheduleDialog(None, self.worker)
+        self.airingwindow.setModal(True)
+        self.airingwindow.show()
 
     def s_mediatype(self, action):
         index = action.data()
@@ -1253,12 +1496,12 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def s_about(self):
-        QMessageBox.about(self, 'About Trackma-qt %s' % utils.VERSION,
-                          '<p><b>About Trackma-qt %s</b></p><p>Trackma is an open source client for media tracking websites.</p>'
+        QMessageBox.about(self, 'About %s %s' % (self.app_name, utils.VERSION),
+                          ('<p><b>About %s %s</b></p><p>Trackma is an open source client for media tracking websites.</p>'
                           '<p>This program is licensed under the GPLv3, for more information read COPYING file.</p>'
                           '<p>Thanks to all contributors. To see all contributors see AUTHORS file.</p>'
                           '<p>Copyright (C) z411 - Icon by shuuichi</p>'
-                          '<p><a href="https://github.com/z411/trackma">https://github.com/z411/trackma</a></p>' % utils.VERSION)
+                          '<p><a href="https://github.com/z411/trackma">https://github.com/z411/trackma</a></p>') % (self.app_name, utils.VERSION))
 
     def s_about_qt(self):
         QMessageBox.aboutQt(self, 'About Qt')
@@ -1337,6 +1580,10 @@ class MainWindow(QMainWindow):
     def ws_tracker_state(self, status):
         self._update_tracker_info(status)
 
+    def ws_undo_stack_changed(self):
+        self.action_undo.setEnabled(self.worker.engine.can_undo())
+        self.action_redo.setEnabled(self.worker.engine.can_redo())
+
     def ws_prompt_update(self, show, episode):
         box = QMessageBox(self)
         box.setWindowTitle("Update prompt")
@@ -1403,8 +1650,12 @@ class MainWindow(QMainWindow):
                     utils.available_libs[self.account['api']][1]))
             self.api_user.setText(
                 self.worker.engine.get_userconfig('username'))
-            self.setWindowTitle("Trackma-qt %s [%s (%s)]" % (
-                utils.VERSION, self.api_info['name'], self.api_info['mediatype']))
+            self.setWindowTitle("%s %s [%s (%s)]" % (
+                self.app_name, utils.VERSION, self.api_info['name'], self.api_info['mediatype']))
+
+            if self.config['taiga_mode']:
+                self._rebuild_services_menu()
+                self._rebuild_library_folders_menu()
 
             # Show tracker info
             tracker_info = self.worker.engine.tracker_status()

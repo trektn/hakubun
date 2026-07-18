@@ -25,10 +25,15 @@ class ShowListModel(QtCore.QAbstractTableModel):
     COL_MY_TAGS = 10
     COL_MY_STATUS = 11
     COL_LAST_UPDATED = 12
+    COL_SEASON = 13
+    COL_TYPE = 14
+    COL_PLATFORM_SCORE = 15
+    COL_MAL_SCORE = 16
 
     columns = ['ID', 'Title', 'Progress', 'Score',
                'Percent', 'Next Episode', 'Start date', 'End date',
-               'My start', 'My finish', 'Tags', 'Status', 'Last updated']
+               'My start', 'My finish', 'Tags', 'Status', 'Last updated', 'Season',
+               'Type', 'Platform Score', 'MAL Score']
 
     editable_columns = [COL_MY_PROGRESS, COL_MY_SCORE]
 
@@ -167,7 +172,7 @@ class ShowListModel(QtCore.QAbstractTableModel):
         if column == ShowListModel.COL_MY_PROGRESS:
             self.progressChanged.emit(show['id'], value)
         elif column == ShowListModel.COL_MY_SCORE:
-            self.scoreChanged.emit(show['id'], value)
+            self.scoreChanged.emit(show['id'], utils.score_to_raw(value, self.mediainfo))
 
         return True
 
@@ -186,7 +191,7 @@ class ShowListModel(QtCore.QAbstractTableModel):
             elif column == ShowListModel.COL_MY_PROGRESS:
                 return "{} / {}".format(show['my_progress'], show['total'] or '?')
             elif column == ShowListModel.COL_MY_SCORE:
-                return show['my_score']
+                return utils.score_to_display(show['my_score'], self.mediainfo)
             elif column == ShowListModel.COL_PERCENT:
                 # return "{:.0%}".format(show['my_progress'] / 100)
                 if show['total']:
@@ -215,6 +220,14 @@ class ShowListModel(QtCore.QAbstractTableModel):
                 return show.get('my_tags', '-')
             elif column == ShowListModel.COL_MY_STATUS:
                 return self.mediainfo['statuses_dict'][show['my_status']]
+            elif column == ShowListModel.COL_SEASON:
+                return utils.get_season_label(show)
+            elif column == ShowListModel.COL_TYPE:
+                return str(show['type'])
+            elif column == ShowListModel.COL_PLATFORM_SCORE:
+                return show.get('platform_score') or '-'
+            elif column == ShowListModel.COL_MAL_SCORE:
+                return show.get('mal_score') or '-'
         elif role == QtCore.Qt.ItemDataRole.BackgroundRole:
             return self.colors.get(row)
         elif role == QtCore.Qt.ItemDataRole.DecorationRole:
@@ -242,13 +255,10 @@ class ShowListModel(QtCore.QAbstractTableModel):
             if column == ShowListModel.COL_MY_PROGRESS:
                 return (show['my_progress'], show['total'], 0, 1)
             elif column == ShowListModel.COL_MY_SCORE:
-                if isinstance(self.mediainfo['score_step'], float):
-                    decimals = len(
-                        str(self.mediainfo['score_step']).split('.')[1])
-                else:
-                    decimals = 0
+                display_max, display_step, decimals = utils.score_display_range(self.mediainfo)
+                display_value = utils.score_to_display(show['my_score'], self.mediainfo)
 
-                return (show['my_score'], self.mediainfo['score_max'], decimals, self.mediainfo['score_step'])
+                return (display_value, display_max, decimals, display_step)
         elif role == QtCore.Qt.ItemDataRole.UserRole:
             if column == ShowListModel.COL_LAST_UPDATED:
                 dt = show.get('my_last_update')
@@ -262,10 +272,16 @@ class ShowListModel(QtCore.QAbstractTableModel):
 
 
 class AddTableModel(QtCore.QAbstractTableModel):
-    columns = ["Name", "Type", "Total"]
+    columns = ["Name", "Type", "Season", "Total", "In Your List"]
 
-    def __init__(self, parent=None):
+    # Subtle highlight for a result already present in the user's list, so
+    # it's not confused with a brand new show (see also AddListDelegate).
+    IN_LIST_COLOR = QtGui.QColor(210, 230, 255)
+
+    def __init__(self, parent=None, mylist=None, statuses_dict=None):
         self.results = None
+        self.mylist = mylist or {}
+        self.statuses_dict = statuses_dict or {}
 
         super().__init__(parent)
 
@@ -281,11 +297,14 @@ class AddTableModel(QtCore.QAbstractTableModel):
             return 0
 
     def columnCount(self, parent):
-        return 3
+        return 5
 
     def headerData(self, section, orientation, role):
         if role == QtCore.Qt.ItemDataRole.DisplayRole and orientation == QtCore.Qt.Orientation.Horizontal:
             return self.columns[section]
+
+    def _mylist_entry(self, item):
+        return self.mylist.get(item.get('id'))
 
     def data(self, index, role):
         row, column = index.row(), index.column()
@@ -298,7 +317,18 @@ class AddTableModel(QtCore.QAbstractTableModel):
             elif column == 1:
                 return str(item.get('type', '?'))
             elif column == 2:
+                return utils.get_season_label(item)
+            elif column == 3:
                 return item.get('total', '?')
+            elif column == 4:
+                entry = self._mylist_entry(item)
+                if entry:
+                    return self.statuses_dict.get(entry['my_status'], '?')
+                return ''
+        elif role == QtCore.Qt.ItemDataRole.BackgroundRole:
+            item = self.results[row]
+            if self._mylist_entry(item):
+                return self.IN_LIST_COLOR
 
 
 class AddListModel(QtCore.QAbstractListModel):

@@ -14,27 +14,44 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QVBoxLayout
+from PyQt6.QtWidgets import QDialog, QDialogButtonBox, QTabWidget, QVBoxLayout
 
 from trackma.ui.qt.widgets import DetailsWidget
 
 
 class DetailsDialog(QDialog):
-    def __init__(self, parent, worker, show):
+    def __init__(self, parent, worker, show, edit_widget=None):
         QDialog.__init__(self, parent)
         self.setMinimumSize(530, 550)
         self.setWindowTitle('Details')
         self.worker = worker
+        # In Taiga mode this is MainWindow's own progress/score/status/tags
+        # widget, on loan for as long as this dialog is open (see
+        # MainWindow.s_show_details) -- detach it on close so it survives
+        # this dialog's destruction and can be reused next time.
+        self.edit_widget = edit_widget
 
         main_layout = QVBoxLayout()
         details = DetailsWidget(self, worker)
+
+        if edit_widget is not None:
+            tabs = QTabWidget()
+            tabs.addTab(details, 'Details')
+            tabs.addTab(edit_widget, 'Edit')
+            main_layout.addWidget(tabs)
+        else:
+            main_layout.addWidget(details)
 
         bottom_buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close)
         bottom_buttons.setCenterButtons(True)
         bottom_buttons.rejected.connect(self.close)
 
-        main_layout.addWidget(details)
         main_layout.addWidget(bottom_buttons)
 
         self.setLayout(main_layout)
         details.load(show)
+
+    def closeEvent(self, event):
+        if self.edit_widget is not None:
+            self.edit_widget.setParent(None)
+        super().closeEvent(event)

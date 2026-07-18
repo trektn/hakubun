@@ -14,11 +14,13 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+import html
 import os
 
 from PyQt6 import QtCore, QtGui
-from PyQt6.QtWidgets import (QAbstractItemView, QGridLayout, QHeaderView, QLabel, QListView, QScrollArea, QSplitter,
-                             QTableView, QVBoxLayout, QWidget)
+from PyQt6.QtWidgets import (QAbstractItemView, QDoubleSpinBox, QFormLayout, QHBoxLayout, QHeaderView,
+                             QLabel, QListView, QProgressBar, QScrollArea, QSlider, QSplitter, QTableView,
+                             QToolButton, QVBoxLayout, QWidget)
 
 from trackma import utils
 from trackma.ui.qt.delegates import AddListDelegate, ShowsTableDelegate
@@ -27,6 +29,14 @@ from trackma.ui.qt.workers import ImageWorker
 
 
 class DetailsWidget(QWidget):
+    # Shown as a full-width prose block with its own heading, instead of
+    # a "Label: Value" row -- everything else from the API's 'extra' list
+    # (Type, Episodes, Status, Score, Studios, alternate titles, etc.) is
+    # backend-specific and can't be known in advance, so it's rendered
+    # generically as an aligned facts table rather than guessing which
+    # ones deserve special treatment.
+    PROSE_KEYS = {'Synopsis'}
+
     def __init__(self, parent, worker):
         self.worker = worker
 
@@ -39,32 +49,50 @@ class DetailsWidget(QWidget):
         self.show_title = QLabel()
         show_title_font = QtGui.QFont()
         show_title_font.setBold(True)
-        show_title_font.setPointSize(12)
+        show_title_font.setPointSize(13)
         self.show_title.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         self.show_title.setFont(show_title_font)
+        self.show_title.setWordWrap(True)
 
-        info_area = QWidget()
-        info_layout = QGridLayout()
+        content = QWidget()
+        content_layout = QVBoxLayout()
+        content_layout.setContentsMargins(14, 14, 14, 14)
+        content_layout.setSpacing(16)
+
+        top_row = QHBoxLayout()
+        top_row.setSpacing(18)
 
         self.show_image = QLabel()
-        self.show_image.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
-        self.show_info = QLabel()
-        self.show_info.setWordWrap(True)
-        self.show_info.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        self.show_image.setFixedSize(200, 280)
+        self.show_image.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.show_image.setStyleSheet(
+            "border: 1px solid palette(mid); border-radius: 3px;")
+
+        self.facts_layout = QFormLayout()
+        self.facts_layout.setLabelAlignment(QtCore.Qt.AlignmentFlag.AlignRight)
+        self.facts_layout.setFormAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        self.facts_layout.setVerticalSpacing(8)
+        self.facts_layout.setHorizontalSpacing(12)
+        facts_widget = QWidget()
+        facts_widget.setLayout(self.facts_layout)
+
+        top_row.addWidget(self.show_image)
+        top_row.addWidget(facts_widget, 1)
+
         self.show_description = QLabel()
         self.show_description.setWordWrap(True)
         self.show_description.setAlignment(QtCore.Qt.AlignmentFlag.AlignTop)
+        self.show_description.setTextFormat(QtCore.Qt.TextFormat.RichText)
 
-        info_layout.addWidget(self.show_image,        0, 0, 1, 1)
-        info_layout.addWidget(self.show_info,         1, 0, 1, 1)
-        info_layout.addWidget(self.show_description,  0, 1, 2, 1)
-
-        info_area.setLayout(info_layout)
+        content_layout.addLayout(top_row)
+        content_layout.addWidget(self.show_description)
+        content_layout.addStretch(1)
+        content.setLayout(content_layout)
 
         scroll_area = QScrollArea()
-        scroll_area.setBackgroundRole(QtGui.QPalette.ColorRole.Light)
         scroll_area.setWidgetResizable(True)
-        scroll_area.setWidget(info_area)
+        scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll_area.setWidget(content)
 
         main_layout.addWidget(self.show_title)
         main_layout.addWidget(scroll_area)
@@ -76,19 +104,26 @@ class DetailsWidget(QWidget):
         self.worker.set_function(function, ret_function, *args, **kwargs)
         self.worker.start()
 
+    def _clear_facts(self):
+        while self.facts_layout.rowCount() > 0:
+            self.facts_layout.removeRow(0)
+
     def load(self, show):
         metrics = QtGui.QFontMetrics(self.show_title.font())
         title = metrics.elidedText(
             show['title'], QtCore.Qt.TextElideMode.ElideRight, self.show_title.width())
 
-        self.show_title.setText("<a href=\"%s\">%s</a>" % (show['url'], title))
+        self.show_title.setText("<a href=\"%s\">%s</a>" % (
+            html.escape(show['url']), html.escape(title)))
         self.show_title.setTextFormat(QtCore.Qt.TextFormat.RichText)
         self.show_title.setTextInteractionFlags(
             QtCore.Qt.TextInteractionFlag.TextBrowserInteraction)
         self.show_title.setOpenExternalLinks(True)
 
         # Load show info
-        self.show_info.setText('Wait...')
+        self._clear_facts()
+        self.facts_layout.addRow(QLabel('Loading details...'))
+        self.show_description.setText('')
         self.worker_call('get_show_details', self.r_details_loaded, show)
         api_info = self.worker.engine.api_info
 
@@ -110,38 +145,47 @@ class DetailsWidget(QWidget):
             self.show_image.setText('No image')
 
     def s_show_image(self, filename):
-        self.show_image.setPixmap(QtGui.QPixmap(filename))
+        self.show_image.setPixmap(QtGui.QPixmap(filename).scaled(
+            self.show_image.size(), QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+            QtCore.Qt.TransformationMode.SmoothTransformation))
 
     def r_details_loaded(self, result):
-        if result['success']:
-            details = result['result']
+        self._clear_facts()
 
-            info_strings = []
-            description_strings = []
-            # This might come down to personal preference
-            description_keys = {'Synopsis', 'English', 'Japanese',  'Romaji', 'Synonyms'}
+        if not result['success']:
+            self.facts_layout.addRow(
+                QLabel('There was an error while getting details.'))
+            return
 
-            for key, value in details['extra']:
-                if not key or not value:
-                    continue
-                str_value = ', '.join(value) if isinstance(value, list) else str(value)
-                if key in description_keys or len(str_value) >= 17:
-                    # Avoid short tidbits taking up too much vertical space
-                    html = f"<h3>{key}</h3><p>{str_value}</p>"
-                else:
-                    html = f"<p><b>{key}:</b> {str_value}</p>"
+        details = result['result']
+        prose_blocks = []
 
-                if key in description_keys:
-                    description_strings.append(html)
-                else:
-                    info_strings.append(html)
+        for key, value in details['extra']:
+            if not key or not value:
+                continue
+            str_value = ', '.join(value) if isinstance(value, list) else str(value)
+            if not str_value:
+                continue
 
-            info_string = ''.join(info_strings)
-            self.show_info.setText(info_string)
-            description_string = ''.join(description_strings)
-            self.show_description.setText(description_string)
-        else:
-            self.show_info.setText('There was an error while getting details.')
+            if key in self.PROSE_KEYS:
+                # str_value's paragraph breaks are real '\n's (see
+                # utils.clean_synopsis) -- escape first, then turn those
+                # into <br> since RichText otherwise collapses them.
+                body = html.escape(str_value).replace('\n', '<br>')
+                prose_blocks.append(f"<h3>{html.escape(key)}</h3><p>{body}</p>")
+                continue
+
+            value_label = QLabel(str_value)
+            value_label.setTextFormat(QtCore.Qt.TextFormat.PlainText)
+            value_label.setWordWrap(True)
+            value_label.setTextInteractionFlags(
+                QtCore.Qt.TextInteractionFlag.TextSelectableByMouse)
+            self.facts_layout.addRow(f'<b>{key}:</b>', value_label)
+
+        if self.facts_layout.rowCount() == 0:
+            self.facts_layout.addRow(QLabel('No details available.'))
+
+        self.show_description.setText(''.join(prose_blocks))
 
 
 class ShowsTableView(QTableView):
@@ -182,7 +226,7 @@ class ShowsTableView(QTableView):
 class AddCardView(QListView):
     changed = QtCore.pyqtSignal(dict)
 
-    def __init__(self, parent=None, api_info=None):
+    def __init__(self, parent=None, api_info=None, mylist=None, statuses_dict=None):
         super().__init__(parent)
 
         m = AddListModel(api_info=api_info)
@@ -190,7 +234,7 @@ class AddCardView(QListView):
         proxy.setSourceModel(m)
         proxy.sort(0, QtCore.Qt.SortOrder.AscendingOrder)
 
-        self.setItemDelegate(AddListDelegate())
+        self.setItemDelegate(AddListDelegate(mylist=mylist, statuses_dict=statuses_dict))
         self.setFlow(QListView.Flow.LeftToRight)
         self.setWrapping(True)
         self.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -222,11 +266,11 @@ class AddTableDetailsView(QSplitter):
 
     changed = QtCore.pyqtSignal(dict)
 
-    def __init__(self, parent=None, worker=None):
+    def __init__(self, parent=None, worker=None, mylist=None, statuses_dict=None):
         super().__init__(parent)
 
         self.table = QTableView()
-        m = AddTableModel()
+        m = AddTableModel(mylist=mylist, statuses_dict=statuses_dict)
         proxy = QtCore.QSortFilterProxyModel()
         proxy.setSourceModel(m)
 
@@ -268,3 +312,189 @@ class AddTableDetailsView(QSplitter):
 
     def clearSelection(self):
         return self.table.clearSelection()
+
+
+class HoverProgressBar(QWidget):
+    """A progress bar with +/- buttons overlaid on its left/right edges
+    instead of sitting beside it -- Taiga mode's compact episode
+    increment control. The buttons stay real (never hidden -- their
+    keyboard shortcuts would stop firing if they were), just styled
+    transparent until the bar is hovered.
+
+    Exposes the same setFormat/setMaximum/setValue/setEnabled surface
+    as a plain QProgressBar so callers don't need to know which one
+    they have.
+    """
+
+    incremented = QtCore.pyqtSignal()
+    decremented = QtCore.pyqtSignal()
+
+    _BTN_HIDDEN = "QToolButton { border: none; background: transparent; color: transparent; }"
+    _BTN_VISIBLE = "QToolButton { border: none; background: palette(mid); color: palette(text); }"
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setMouseTracking(True)
+
+        self.bar = QProgressBar(self)
+
+        self.dec_btn = QToolButton(self)
+        self.dec_btn.setText('-')
+        self.dec_btn.setAutoRaise(True)
+        self.dec_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.dec_btn.setStyleSheet(self._BTN_HIDDEN)
+        self.dec_btn.clicked.connect(self.decremented.emit)
+
+        self.inc_btn = QToolButton(self)
+        self.inc_btn.setText('+')
+        self.inc_btn.setAutoRaise(True)
+        self.inc_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.inc_btn.setStyleSheet(self._BTN_HIDDEN)
+        self.inc_btn.clicked.connect(self.incremented.emit)
+
+        self.setMinimumHeight(self.bar.sizeHint().height())
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self.bar.setGeometry(0, 0, self.width(), self.height())
+        btn_w = max(20, min(28, self.width() // 5))
+        self.dec_btn.setGeometry(0, 0, btn_w, self.height())
+        self.inc_btn.setGeometry(self.width() - btn_w, 0, btn_w, self.height())
+
+    def enterEvent(self, event):
+        self.dec_btn.setStyleSheet(self._BTN_VISIBLE)
+        self.inc_btn.setStyleSheet(self._BTN_VISIBLE)
+        super().enterEvent(event)
+
+    def leaveEvent(self, event):
+        self.dec_btn.setStyleSheet(self._BTN_HIDDEN)
+        self.inc_btn.setStyleSheet(self._BTN_HIDDEN)
+        super().leaveEvent(event)
+
+    def setFormat(self, fmt):
+        self.bar.setFormat(fmt)
+
+    def setMaximum(self, value):
+        self.bar.setMaximum(value)
+
+    def setValue(self, value):
+        self.bar.setValue(value)
+
+    def setEnabled(self, enabled):
+        super().setEnabled(enabled)
+        self.bar.setEnabled(enabled)
+        self.dec_btn.setEnabled(enabled)
+        self.inc_btn.setEnabled(enabled)
+
+
+class ScoreSlider(QWidget):
+    """
+    Score control combining a slider (for quick, approximate rating) with
+    a small spin box (for exact values and fine-grained scales like
+    AniList's 0-100). Both stay in sync and operate on the API's raw
+    score scale internally, but present a friendlier display scale via
+    utils.score_display_range/score_display_factor (see there for why:
+    e.g. Kitsu's 0-5 in 0.25 increments is shown as 0-10 in 0.5
+    increments, matching the convention of larger-scale APIs).
+
+    A value of zero is always "no score set yet" and is shown as such
+    rather than a literal 0.
+    """
+
+    valueChanged = QtCore.pyqtSignal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+
+        self._raw_step = 1
+        self._raw_decimals = 0
+        self._factor = 1
+        self._syncing = False
+
+        self.slider = QSlider(QtCore.Qt.Orientation.Horizontal)
+        self.slider.setMinimumWidth(160)
+        self.slider.valueChanged.connect(self._on_slider_changed)
+
+        self.spin = QDoubleSpinBox()
+        self.spin.setMinimumWidth(70)
+        self.spin.setSpecialValueText('Unrated')
+        self.spin.valueChanged.connect(self._on_spin_changed)
+
+        # The slider needs real width to be usable (fine-grained scales
+        # like AniList's 0-100 need every pixel of resolution they can
+        # get), so it gets its own full-width row; the spin box and any
+        # extra widgets (e.g. a "Set" button) sit on a second row below
+        # instead of competing with the slider for horizontal space.
+        layout = QVBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(2)
+        layout.addWidget(self.slider)
+
+        self._extra_row = QHBoxLayout()
+        self._extra_row.setContentsMargins(0, 0, 0, 0)
+        self._extra_row.addWidget(self.spin)
+        self._extra_row.addStretch(1)
+        layout.addLayout(self._extra_row)
+
+        self.setLayout(layout)
+
+    def add_extra_widget(self, widget):
+        """
+        Appends an external widget (e.g. a "Set" button) into the row
+        below the slider, so a caller can give the whole group a single
+        form-layout row without the slider having to compete with it for
+        horizontal space.
+        """
+        self._extra_row.addWidget(widget)
+
+    def setMediaInfo(self, mediainfo):
+        self._raw_step = mediainfo['score_step']
+        self._raw_decimals = utils.decimal_places(self._raw_step)
+        self._factor = utils.score_display_factor(mediainfo)
+        display_max, display_step, display_decimals = utils.score_display_range(mediainfo)
+
+        ticks = round(mediainfo['score_max'] / self._raw_step)
+
+        self._syncing = True
+        self.slider.setRange(0, ticks)
+        self.spin.setDecimals(display_decimals)
+        self.spin.setSingleStep(display_step)
+        self.spin.setRange(0, display_max)
+        self.slider.setValue(0)
+        self.spin.setValue(0)
+        self._syncing = False
+
+    def setValue(self, raw_score):
+        tick = round((raw_score or 0) / self._raw_step) if self._raw_step else 0
+        self._set_tick(tick)
+
+    def value(self):
+        raw = self.slider.value() * self._raw_step
+        return round(raw, self._raw_decimals) if self._raw_decimals else int(raw)
+
+    def _tick_to_display(self, tick):
+        raw = tick * self._raw_step
+        raw = round(raw, self._raw_decimals) if self._raw_decimals else raw
+        return raw * self._factor
+
+    def _display_to_tick(self, display_value):
+        raw = display_value / self._factor
+        return round(raw / self._raw_step) if self._raw_step else 0
+
+    def _set_tick(self, tick):
+        self._syncing = True
+        self.slider.setValue(tick)
+        self.spin.setValue(self._tick_to_display(tick))
+        self._syncing = False
+
+    def _on_slider_changed(self, tick):
+        if self._syncing:
+            return
+        self._set_tick(tick)
+        self.valueChanged.emit()
+
+    def _on_spin_changed(self, display_value):
+        if self._syncing:
+            return
+        self._set_tick(self._display_to_tick(display_value))
+        self.valueChanged.emit()

@@ -17,8 +17,8 @@
 from datetime import date
 
 from PyQt6 import QtCore
-from PyQt6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QLineEdit, QMessageBox, QPushButton,
-                             QRadioButton, QSpinBox, QSplitter, QStackedWidget, QVBoxLayout)
+from PyQt6.QtWidgets import (QComboBox, QDialog, QDialogButtonBox, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+                             QPushButton, QRadioButton, QSpinBox, QSplitter, QStackedWidget, QVBoxLayout)
 
 from trackma import utils
 from trackma.ui.qt.details import DetailsDialog
@@ -44,6 +44,12 @@ class AddDialog(QDialog):
         # Get available search methods and default to keyword search if not reported by the API
         search_methods = self.worker.engine.mediainfo.get(
             'search_methods', [utils.SearchMethod.KW])
+
+        # Shows already in the user's list, so search results can be
+        # highlighted instead of letting the user accidentally re-add
+        # or lose track of something they're already tracking.
+        self.mylist = {show['id']: show for show in self.worker.engine.get_list()}
+        self.statuses_dict = self.worker.engine.mediainfo['statuses_dict']
 
         layout = QVBoxLayout()
 
@@ -107,10 +113,12 @@ class AddDialog(QDialog):
         self.contents = QStackedWidget()
 
         # Set up views
-        tableview = AddTableDetailsView(None, self.worker)
+        tableview = AddTableDetailsView(
+            None, self.worker, mylist=self.mylist, statuses_dict=self.statuses_dict)
         tableview.changed.connect(self.s_selected)
 
-        cardview = AddCardView(api_info=self.worker.engine.api_info)
+        cardview = AddCardView(
+            api_info=self.worker.engine.api_info, mylist=self.mylist, statuses_dict=self.statuses_dict)
         cardview.changed.connect(self.s_selected)
         cardview.doubleClicked.connect(self.s_show_details)
 
@@ -186,9 +194,39 @@ class AddDialog(QDialog):
         self.add_btn.setEnabled(True)
 
     def s_add(self):
-        if self.selected_show:
-            self.worker_call('add_show', self.r_added,
-                             self.selected_show, self.current_status)
+        if not self.selected_show:
+            return
+
+        mediainfo = self.worker.engine.mediainfo
+        statuses = mediainfo['statuses']
+        statuses_dict = mediainfo['statuses_dict']
+
+        # Default status is configurable (Settings > Behavior): either the
+        # currently active tab, or the API's "Plan to Watch" status (the
+        # last entry of `statuses` by convention across every backend --
+        # `statuses_start` is a different thing: the status a show flips to
+        # once you start watching it, e.g. "watching"/"CURRENT"). Either
+        # way we always confirm before adding, so a show is never silently
+        # dropped into whatever tab happened to be active.
+        default_status = self.current_status
+        if self.worker.engine.get_config('add_dialog_default_status') == 'start' \
+                and statuses:
+            default_status = statuses[-1]
+
+        dialog = AddStatusDialog(
+            self,
+            show_title=self.selected_show['title'],
+            statuses=statuses,
+            statuses_dict=statuses_dict,
+            default_status=default_status,
+        )
+
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+
+        chosen_status = dialog.chosen_status()
+        self.worker_call('add_show', self.r_added,
+                         self.selected_show, chosen_status)
 
     # Worker responses
     def r_searched(self, result):
@@ -196,11 +234,6 @@ class AddDialog(QDialog):
 
         if result['success']:
             self.set_results(result['result'])
-
-            """
-            if self.table.currentRow() == 0:  # Row number hasn't changed but the data probably has!
-                self.s_show_selected(self.table.item(0, 0))
-            self.table.setCurrentItem(self.table.item(0, 0))"""
         else:
             self.set_results(None)
 
@@ -209,5 +242,63 @@ class AddDialog(QDialog):
             if self.default:
                 self.accept()
             else:
+                title = self.selected_show.get('title', 'Show')
                 QMessageBox.information(
-                    self, 'Information', "Show added successfully")
+                    self, 'Added', f'"{title}" was added to your list.')
+
+
+class AddStatusDialog(QDialog):
+    """
+    Confirmation dialog shown before adding a show to the list.
+
+    Lets the user choose which status to add the show under instead of
+    silently inheriting whatever tab happens to be active. This prevents
+    accidentally adding a show to Dropped or On Hold when auto-sync is on.
+    """
+
+    def __init__(self, parent, show_title, statuses, statuses_dict, default_status):
+        super().__init__(parent)
+        self.setWindowTitle('Add to list')
+        self.setMinimumWidth(340)
+
+        layout = QVBoxLayout()
+        layout.setSpacing(12)
+
+        # Show title
+        title_label = QLabel(f'<b>{show_title}</b>')
+        title_label.setWordWrap(True)
+        layout.addWidget(title_label)
+
+        # Status row
+        status_row = QHBoxLayout()
+        status_label = QLabel('Add as:')
+        status_label.setFixedWidth(56)
+        self._status_combo = QComboBox()
+
+        default_index = 0
+        for i, status in enumerate(statuses):
+            self._status_combo.addItem(statuses_dict[status], userData=status)
+            if status == default_status:
+                default_index = i
+
+        self._status_combo.setCurrentIndex(default_index)
+
+        status_row.addWidget(status_label)
+        status_row.addWidget(self._status_combo, 1)
+        layout.addLayout(status_row)
+
+        # Buttons
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok |
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        buttons.button(QDialogButtonBox.StandardButton.Ok).setText('Add')
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addWidget(buttons)
+
+        self.setLayout(layout)
+
+    def chosen_status(self):
+        """Returns the status value selected by the user."""
+        return self._status_combo.currentData()

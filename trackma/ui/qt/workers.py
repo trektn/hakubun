@@ -98,6 +98,7 @@ class EngineWorker(QtCore.QThread):
     playing_show = QtCore.pyqtSignal(dict, bool, int)
     prompt_for_update = QtCore.pyqtSignal(dict, int)
     prompt_for_add = QtCore.pyqtSignal(dict, int)
+    undo_stack_changed = QtCore.pyqtSignal()
 
     def __init__(self):
         super(EngineWorker, self).__init__()
@@ -137,12 +138,16 @@ class EngineWorker(QtCore.QThread):
     def _prompt_for_add(self, show, episode):
         self.prompt_for_add.emit(show, episode)
 
+    def _undo_stack_changed(self):
+        self.undo_stack_changed.emit()
+
     def _start(self, account):
         self.engine = Engine(account, self._messagehandler)
 
         self.engine.connect_signal('episode_changed', self._changed_show)
         self.engine.connect_signal('score_changed', self._changed_show)
         self.engine.connect_signal('tags_changed', self._changed_show)
+        self.engine.connect_signal('mal_score_changed', self._changed_show)
         self.engine.connect_signal('status_changed', self._changed_show_status)
         self.engine.connect_signal('playing', self._playing_show)
         self.engine.connect_signal('show_added', self._changed_list)
@@ -153,6 +158,8 @@ class EngineWorker(QtCore.QThread):
             'prompt_for_update', self._prompt_for_update)
         self.engine.connect_signal('prompt_for_add', self._prompt_for_add)
         self.engine.connect_signal('tracker_state', self._tracker_state)
+        self.engine.connect_signal(
+            'undo_stack_changed', self._undo_stack_changed)
 
         self.engine.start()
 
