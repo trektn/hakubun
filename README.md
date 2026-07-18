@@ -180,6 +180,12 @@ contributions on their own. Please respect upstream's contribution policy and do
 patches from this fork upstream unless they have been independently reviewed and comply with
 that policy.
 
+Branding
+--------
+
+Hakubun uses a hanko (Japanese seal) as its primary visual identity. The `assets/` directory
+contains logos and headers. The hanko serves as the desktop application icon.
+
 Maintenance expectations
 -------------------------
 
