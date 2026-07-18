@@ -115,22 +115,6 @@ class libkitsu(lib):
         'score_max': 5,
         'score_step': 0.25,
     }
-    mediatypes['drama'] = {
-        'has_progress': True,
-        'can_add': True,
-        'can_delete': True,
-        'can_score': True,
-        'can_status': True,
-        'can_update': True,
-        'can_play': True,
-        'statuses_start': ['current'],
-        'statuses_finish': ['completed'],
-        'statuses': default_statuses,
-        'statuses_dict': default_statuses_dict,
-        'score_max': 5,
-        'score_step': 0.25,
-    }
-
     url = 'https://kitsu.app/api'
     prefix = 'https://kitsu.app/api/edge'
 
@@ -286,6 +270,32 @@ class libkitsu(lib):
 
         return True
 
+    def _process_library_page(self, data_json, showlist, infolist, page_num):
+        """Parses one page of library-entries results into showlist/infolist."""
+        entries = data_json['data']
+
+        for entry in entries:
+            # TODO : Including the mediatype returns a 500 for some reason.
+            # showid = int(entry['relationships'][self.mediatype]['data']['id'])
+            showid = int(entry['relationships']['media']['data']['id'])
+            rating = entry['attributes']['ratingTwenty']
+
+            showlist[showid] = utils.show()
+            showlist[showid].update({
+                'id': showid,
+                'my_id': entry['id'],
+                'my_progress': entry['attributes']['progress'],
+                'my_score': float(rating)/4.00 if rating is not None else 0.0,
+                'my_status': entry['attributes']['status'],
+                'my_start_date': self._iso2date(entry['attributes']['startedAt']),
+                'my_finish_date': self._iso2date(entry['attributes']['finishedAt']),
+                'my_last_update': self._iso2datetime(entry['attributes']['updatedAt']),
+            })
+
+        if 'included' in data_json:
+            for media in data_json['included']:
+                infolist.append(self._parse_info(media))
+
     def fetch_list(self):
         """Queries the full list from the remote server.
         Returns the list if successful, False otherwise."""
@@ -308,8 +318,7 @@ class libkitsu(lib):
                     'slug',
                     'canonicalTitle',
                     'titles',
-                    'episodeCount' if self.mediatype in [
-                        'anime', 'drama'] else 'chapterCount',
+                    'episodeCount' if self.mediatype == 'anime' else 'chapterCount',
                     'description',
                     'status',
                     'tba',
@@ -326,7 +335,6 @@ class libkitsu(lib):
                     'userCount',
                     'favoritesCount'
                 ]),
-                "page[limit]": "250",
             }
 
             if self.mediatype == 'anime':
@@ -335,51 +343,32 @@ class libkitsu(lib):
             if self.mediatype == 'manga':
                 params['fields[manga]'] += ',serialization'
 
+            params['page[limit]'] = "250"
             url = "{}/library-entries?{}".format(
                 self.prefix, urllib.parse.urlencode(params))
-            i = 1
 
+            # NOTE: an earlier version of this tried to fetch subsequent
+            # pages in parallel by computing their offsets from the first
+            # page's 'links.last' value. That produced a truncated list on
+            # at least one real account (missing shows), for a reason not
+            # yet understood, so it's reverted to plain sequential
+            # next-link following -- slower, but correct.
+            i = 1
             while url:
                 self.msg.info('Getting page {}...'.format(i))
-
                 data = self._request('GET', url)
                 data_json = json.loads(data)
-
-                # print(json.dumps(data_json, sort_keys=True, indent=2))
-                # return []
-
-                entries = data_json['data']
-                links = data_json['links']
-
-                for entry in entries:
-                    # TODO : Including the mediatype returns a 500 for some reason.
-                    # showid = int(entry['relationships'][self.mediatype]['data']['id'])
-                    showid = int(entry['relationships']['media']['data']['id'])
-                    status = entry['attributes']['status']
-                    rating = entry['attributes']['ratingTwenty']
-
-                    showlist[showid] = utils.show()
-                    showlist[showid].update({
-                        'id': showid,
-                        'my_id': entry['id'],
-                        'my_progress': entry['attributes']['progress'],
-                        'my_score': float(rating)/4.00 if rating is not None else 0.0,
-                        'my_status': entry['attributes']['status'],
-                        'my_start_date': self._iso2date(entry['attributes']['startedAt']),
-                        'my_finish_date': self._iso2date(entry['attributes']['finishedAt']),
-                        'my_last_update': self._iso2datetime(entry['attributes']['updatedAt']),
-                    })
-
-                if 'included' in data_json:
-                    medias = data_json['included']
-                    for media in medias:
-                        info = self._parse_info(media)
-                        infolist.append(info)
-
-                    self._emit_signal('show_info_changed', infolist)
-
-                url = links.get('next')
+                self._process_library_page(data_json, showlist, infolist, i)
+                url = data_json.get('links', {}).get('next')
                 i += 1
+
+            # Emitted once at the end with the full accumulated list, not
+            # per-page -- the handler (data.py's info_update) does a full
+            # disk write of the whole info cache on every call, so doing
+            # this per-page meant paying that cost (and re-serializing an
+            # ever-growing list) once per page instead of once total.
+            if infolist:
+                self._emit_signal('show_info_changed', infolist)
 
             return showlist
         except urllib.error.HTTPError as e:
@@ -401,9 +390,11 @@ class libkitsu(lib):
         show['start_date'] = info['start_date']
         show['end_date'] = info['end_date']
         show['status'] = info['status']
+        show['type'] = info['type']
+        show['platform_score'] = info['platform_score']
 
     def request_info(self, item_list):
-        print("These are missing: " + repr(item_list))
+        self.msg.debug("Missing show info requested: " + repr(item_list))
         # TODO implement
         raise NotImplementedError
 
@@ -572,8 +563,6 @@ class libkitsu(lib):
             total = attr['episodeCount']
         elif media['type'] == 'manga':
             total = attr['chapterCount']
-        elif media['type'] == 'drama':
-            total = attr['episodeCount']
 
         poster_image = attr.get('posterImage', {})
         image = utils.get_any(poster_image, PosterImageKey.SMALL, PosterImageKey.MEDIUM, PosterImageKey.LARGE, PosterImageKey.ORIGINAL)
@@ -591,10 +580,12 @@ class libkitsu(lib):
             'end_date':    self._str2date(attr['endDate']),
             'type':        self.type_translate.get(attr['subtype'], utils.Type.UNKNOWN),
             'status':      self.status_translate.get(attr['status'], utils.Status.UNKNOWN),
+            'platform_score': (
+                '%.0f%%' % float(attr['averageRating']) if attr.get('averageRating') else None),
             'url': "https://kitsu.app/{}/{}".format(self.mediatype, attr['slug']),
             'aliases':     list(filter(None, attr['titles'].values())),
             'extra': [
-                ('Synopsis',            attr['description']),
+                ('Synopsis',            utils.clean_synopsis(attr['description'])),
                 ('Type',                attr['subtype']),
                 ('Titles',              list(
                     filter(None, attr['titles'].values()))),
