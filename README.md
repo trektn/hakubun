@@ -23,8 +23,6 @@ Features
 - Undo and redo for progress, score, status, and tag changes (GTK and Qt)
 - GTK list filtering, drag-and-drop status moves, and additional list columns (Season, Type, Platform Score, MAL Score)
 - Qt toolbar actions, "Move to status" menu, and improved show-detail layout
-- An airing schedule window
-- "Taiga mode" — an optional display mode that emulates the look and workflow of [Taiga.moe](https://taiga.moe/); see [Relationship to upstream](#relationship-to-upstream)
 
 Currently supported websites
 ----------------------------
@@ -177,10 +175,6 @@ This fork was developed using AI assistance. Upstream Trackma does not accept AI
 contributions on their own. Please respect upstream's contribution policy and do not submit
 patches from this fork upstream unless they have been independently reviewed and comply with
 that policy.
-
-Hakubun's "Taiga mode" is directly inspired by, and emulates the look and workflow of,
-[Taiga.moe](https://taiga.moe/), the Windows-only anime tracker. It does not redistribute
-Taiga's logo or other copyrighted assets. Hakubun is not affiliated with or endorsed by Taiga.moe.
 
 Maintenance expectations
 -------------------------
