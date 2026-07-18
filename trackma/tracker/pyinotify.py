@@ -91,7 +91,11 @@ class pyinotifyTracker(inotifyBase.inotifyBase):
 
                     notifier.read_events()
                     notifier.process_events()
-                    if self.last_state == utils.Tracker.NOVIDEO or self.last_updated:
+                    if self.last_updated or self.last_show_tuple is None:
+                        # Nothing to count down (no video, or a show that
+                        # wasn't matched and isn't queued for an add
+                        # prompt), so there's no point waking up every
+                        # second just to re-emit the same state.
                         timeout = None  # Block indefinitely
                     else:
                         timeout = 1000  # Check each second for counting

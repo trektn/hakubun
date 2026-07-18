@@ -33,3 +33,4 @@ class ShowEventType(GObject.GEnum):
     EPISODE_REMOVE = 12
     SET_SCORE = 13
     SET_STATUS = 14
+    PLAY_EPISODE_PICK = 15

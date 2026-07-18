@@ -15,8 +15,6 @@
 #
 
 import os
-import subprocess
-import sys
 import threading
 
 from gi.repository import GLib, Gdk, Gio, Gtk
@@ -28,6 +26,7 @@ from trackma.engine import Engine
 from trackma.ui.gtk import gtk_dir
 from trackma.ui.gtk.accountswindow import AccountsWindow
 from trackma.ui.gtk.mainview import MainView
+from trackma.ui.gtk.airingwindow import AiringScheduleWindow
 from trackma.ui.gtk.searchwindow import SearchWindow
 from trackma.ui.gtk.settingswindow import SettingsWindow
 from trackma.ui.gtk.showeventtype import ShowEventType
@@ -40,12 +39,22 @@ class TrackmaWindow(Gtk.ApplicationWindow):
     __gtype_name__ = 'TrackmaWindow'
 
     btn_appmenu = Gtk.Template.Child()
-    btn_mediatype = Gtk.Template.Child()
+    btn_search = Gtk.Template.Child()
+    btn_airing_schedule = Gtk.Template.Child()
+    mediatype_box = Gtk.Template.Child()
     header_bar = Gtk.Template.Child()
 
     def __init__(self, app, debug=False):
         Gtk.ApplicationWindow.__init__(self, application=app)
         self.init_template()
+
+        # GtkHeaderBar's end-packing order isn't reliably controllable via
+        # <packing> position in the .ui file (verified empirically -- it's
+        # silently ignored there), so force it here instead. Lower
+        # "position" among pack-type=end children sits closer to the true
+        # edge, so appmenu (position 0) ends up rightmost.
+        self.header_bar.child_set_property(self.btn_appmenu, 'position', 0)
+        self.header_bar.child_set_property(self.mediatype_box, 'position', 1)
 
         self._debug = debug
         self._configfile = utils.to_config_path('ui-Gtk.json')
@@ -88,9 +97,27 @@ class TrackmaWindow(Gtk.ApplicationWindow):
             self._main_view.connect(
                 'error-fatal', self._on_main_view_error_fatal)
             self._main_view.connect('show-action', self._on_show_action)
-            self.add(self._main_view)
+
+            # The filter bar lives directly below the header bar (outside
+            # MainView's own margined layout) so revealing it visually
+            # drops down from the very top of the window, full width,
+            # instead of appearing squeezed in among the show details.
+            self.search_entry = Gtk.SearchEntry()
+            self.search_entry.set_placeholder_text('Filter shows...')
+            self.search_entry.set_width_chars(48)
+            self.search_bar = Gtk.SearchBar()
+            self.search_bar.add(self.search_entry)
+            self.search_bar.connect_entry(self.search_entry)
+            self.search_entry.connect('search-changed', self._on_search_changed)
+
+            content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+            content_box.pack_start(self.search_bar, False, False, 0)
+            content_box.pack_start(self._main_view, True, True, 0)
+            content_box.show_all()
+            self.add(content_box)
 
         self.connect('delete_event', self._on_delete_event)
+        self.connect('key-press-event', self._on_key_press)
 
         builder = Gtk.Builder.new_from_file(
             os.path.join(gtk_dir, 'data/shortcuts.ui'))
@@ -144,6 +171,26 @@ class TrackmaWindow(Gtk.ApplicationWindow):
     def _on_tray_quit_clicked(self, status_icon):
         self._quit()
 
+    def _on_key_press(self, widget, event):
+        if event.keyval == Gdk.KEY_slash:
+            focus = self.get_focus()
+            if isinstance(focus, (Gtk.Entry, Gtk.TextView)):
+                return False
+            self.reveal_search()
+            return True
+        return False
+
+    def _on_filter(self, action, param):
+        self.reveal_search()
+
+    def reveal_search(self):
+        """Shows (or focuses, if already shown) the show-list filter bar."""
+        self.search_bar.set_search_mode(True)
+        self.search_entry.grab_focus()
+
+    def _on_search_changed(self, entry):
+        self._main_view.filter_shows(entry.get_text())
+
     def _on_delete_event(self, widget, event, data=None):
         if self.statusicon and self.statusicon.get_visible() and self._config['close_to_tray']:
             self.hidden = True
@@ -154,10 +201,12 @@ class TrackmaWindow(Gtk.ApplicationWindow):
 
     def _create_engine(self, account):
         self._engine = Engine(account, self._message_handler)
+        self._engine.connect_signal(
+            'undo_stack_changed', self._on_undo_stack_changed)
 
         self._main_view.load_engine_account(self._engine, account)
         self._set_actions()
-        self._set_mediatypes_menu()
+        self._set_mediatypes_buttons()
         self._update_widgets(account)
         self._set_buttons_sensitive(True)
 
@@ -177,6 +226,7 @@ class TrackmaWindow(Gtk.ApplicationWindow):
             self.add_action(action)
 
         add_action('search', self._on_search)
+        add_action('airing_schedule', self._on_airing_schedule)
         add_action('synchronize', self._on_synchronize)
         add_action('upload', self._on_upload)
         add_action('download', self._on_download)
@@ -185,6 +235,17 @@ class TrackmaWindow(Gtk.ApplicationWindow):
         add_action('preferences', self._on_preferences)
         add_action('about', self._on_about)
 
+        add_action('filter', self._on_filter)
+
+        self.action_undo = Gio.SimpleAction.new('undo', None)
+        self.action_undo.connect('activate', self._on_undo)
+        self.action_undo.set_enabled(False)
+        self.add_action(self.action_undo)
+        self.action_redo = Gio.SimpleAction.new('redo', None)
+        self.action_redo.connect('activate', self._on_redo)
+        self.action_redo.set_enabled(False)
+        self.add_action(self.action_redo)
+
         add_action('play_next', self._on_action_play_next)
         add_action('play_random', self._on_action_play_random)
         add_action('episode_add', self._on_action_episode_add)
@@ -192,34 +253,36 @@ class TrackmaWindow(Gtk.ApplicationWindow):
         add_action('delete', self._on_action_delete)
         add_action('copy', self._on_action_copy)
 
-    def _set_mediatypes_action(self):
-        action_name = 'change-mediatype'
-        if self.has_action(action_name):
-            self.remove_action(action_name)
+    def _set_mediatypes_buttons(self):
+        """
+        Media type (anime/manga/etc) switcher, shown as plain toggle
+        buttons directly on the title bar instead of a menu -- there are
+        only ever a handful of these, and burying them behind a click
+        just to see (let alone change) the current one isn't worth it.
+        """
+        for child in self.mediatype_box.get_children():
+            self.mediatype_box.remove(child)
 
-        state = GLib.Variant.new_string(self._engine.api_info['mediatype'])
-        action = Gio.SimpleAction.new_stateful(action_name,
-                                               state.get_type(),
-                                               state)
-        action.connect('change-state', self._on_change_mediatype)
-        self.add_action(action)
+        mediatypes = self._engine.api_info['supported_mediatypes']
 
-    def _set_mediatypes_menu(self):
-        self._set_mediatypes_action()
-        menu = Gio.Menu()
+        if len(mediatypes) <= 1:
+            self.mediatype_box.hide()
+            return
 
-        for mediatype in self._engine.api_info['supported_mediatypes']:
-            variant = GLib.Variant.new_string(mediatype)
-            menu_item = Gio.MenuItem()
-            menu_item.set_label(mediatype)
-            menu_item.set_action_and_target_value(
-                'win.change-mediatype', variant)
-            menu.append_item(menu_item)
+        current = self._engine.api_info['mediatype']
+        group = None
+        for mediatype in mediatypes:
+            btn = Gtk.RadioButton.new_with_label_from_widget(group, mediatype.capitalize())
+            # Draw as a plain button, not a radio button with a dot.
+            btn.set_mode(False)
+            if group is None:
+                group = btn
+            btn.set_active(mediatype == current)
+            btn.connect('toggled', self._on_mediatype_button_toggled, mediatype)
+            btn.show()
+            self.mediatype_box.add(btn)
 
-        self.btn_mediatype.set_menu_model(menu)
-
-        if len(self._engine.api_info['supported_mediatypes']) <= 1:
-            self.btn_mediatype.hide()
+        self.mediatype_box.show()
 
     def _update_widgets(self, account):
         current_api = utils.available_libs[account['api']]
@@ -232,9 +295,11 @@ class TrackmaWindow(Gtk.ApplicationWindow):
         if self.statusicon and self._config['tray_api_icon']:
             self.statusicon.set_from_file(api_iconfile)
 
-    def _on_change_mediatype(self, action, value):
-        action.set_state(value)
-        mediatype = value.get_string()
+    def _on_mediatype_button_toggled(self, button, mediatype):
+        if not button.get_active():
+            return
+        if mediatype == self._engine.api_info['mediatype']:
+            return
         self._set_buttons_sensitive(False)
         self._main_view.load_account_mediatype(
             None, mediatype, self.header_bar)
@@ -251,6 +316,12 @@ class TrackmaWindow(Gtk.ApplicationWindow):
     def _on_search_error(self, search_window, error_msg):
         print(error_msg)
 
+    def _on_airing_schedule(self, action, param):
+        win = AiringScheduleWindow(self._engine, transient_for=self)
+        win.connect('destroy', self._on_modal_destroy)
+        win.present()
+        self._modals.append(win)
+
     def _on_synchronize(self, action, param):
         threading.Thread(target=self._synchronization_task,
                          args=(True, True)).start()
@@ -258,6 +329,28 @@ class TrackmaWindow(Gtk.ApplicationWindow):
     def _on_upload(self, action, param):
         threading.Thread(target=self._synchronization_task,
                          args=(True, False)).start()
+
+    def _on_undo(self, action, param):
+        # The setter called internally (set_status/set_episode/etc.) emits
+        # its usual signal, which the existing per-show refresh handlers
+        # already pick up -- no extra UI refresh needed here.
+        try:
+            self._engine.undo()
+        except utils.TrackmaError as e:
+            self._error_dialog(e)
+
+    def _on_redo(self, action, param):
+        try:
+            self._engine.redo()
+        except utils.TrackmaError as e:
+            self._error_dialog(e)
+
+    def _on_undo_stack_changed(self):
+        GLib.idle_add(self._update_undo_redo_sensitivity)
+
+    def _update_undo_redo_sensitivity(self):
+        self.action_undo.set_enabled(self._engine.can_undo())
+        self.action_redo.set_enabled(self._engine.can_redo())
 
     def _on_download(self, action, param):
         def _download_lists():
@@ -366,8 +459,14 @@ class TrackmaWindow(Gtk.ApplicationWindow):
         win = SettingsWindow(self._engine, self._config,
                              self._configfile, transient_for=self)
         win.connect('destroy', self._on_modal_destroy)
+        win.connect('settings-saved', self._on_settings_saved)
         win.present()
         self._modals.append(win)
+
+    def _on_settings_saved(self, _settings_window):
+        if self._engine.get_config('sync_on_settings_apply'):
+            threading.Thread(target=self._synchronization_task,
+                             args=(True, False)).start()
 
     def _on_about(self, _action, _param):
         about = Gtk.AboutDialog(parent=self)
@@ -486,6 +585,8 @@ class TrackmaWindow(Gtk.ApplicationWindow):
             self._play_next(*data)
         elif event_type == ShowEventType.PLAY_EPISODE:
             self._play_episode(*data)
+        elif event_type == ShowEventType.PLAY_EPISODE_PICK:
+            self._play_episode_pick(*data)
         elif event_type == ShowEventType.EPISODE_REMOVE:
             self._episode_remove(*data)
         elif event_type == ShowEventType.EPISODE_SET:
@@ -526,6 +627,40 @@ class TrackmaWindow(Gtk.ApplicationWindow):
             utils.spawn_process(args)
         except utils.TrackmaError as e:
             self._error_dialog(e)
+
+    def _play_episode_pick(self, show_id):
+        show = self._engine.get_show_info(show_id)
+        total = show['total'] or utils.estimate_aired_episodes(show) or 0
+        ep_max = total if total > 0 else 100000
+        ep_default = min(show['my_progress'] + 1, ep_max)
+
+        dialog = Gtk.MessageDialog(
+            self,
+            Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
+            Gtk.MessageType.QUESTION,
+            Gtk.ButtonsType.OK_CANCEL,
+            None)
+        dialog.set_markup('Play <b>episode</b> of %s' %
+                          GLib.markup_escape_text(show['title']))
+        adjustment = Gtk.Adjustment(
+            value=ep_default, lower=1, upper=ep_max,
+            step_increment=1, page_increment=10)
+        spin = Gtk.SpinButton()
+        spin.set_adjustment(adjustment)
+        spin.set_numeric(True)
+        spin.connect(
+            "activate", lambda entry: dialog.response(Gtk.ResponseType.OK))
+        hbox = Gtk.HBox()
+        hbox.pack_start(Gtk.Label("Episode:"), False, 5, 5)
+        hbox.pack_end(spin, True, True, 0)
+        dialog.vbox.pack_end(hbox, True, True, 0)
+        dialog.show_all()
+        retval = dialog.run()
+
+        if retval == Gtk.ResponseType.OK:
+            self._play_episode(show_id, spin.get_value_as_int())
+
+        dialog.destroy()
 
     def _play_random(self):
         try:
@@ -632,6 +767,7 @@ class TrackmaWindow(Gtk.ApplicationWindow):
 
     def _set_buttons_sensitive(self, sensitive):
         actions_names = ['search',
+                         'airing_schedule',
                          'synchronize',
                          'upload',
                          'download',

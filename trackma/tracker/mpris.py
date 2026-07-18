@@ -81,6 +81,7 @@ class Player:
     playback_status: str | None = None
     title: str | None = None
     url: str | None = None
+    length: int | None = None  # Milliseconds; from mpris:length metadata.
 
     @classmethod
     async def new(cls, config, router, wellknown_name, unique_name):
@@ -109,9 +110,12 @@ class Player:
         if metadata:
             self.title = safe_get_dbus_value(metadata.get('xesam:title'), 's')
             self.url = safe_get_dbus_value(metadata.get('xesam:url'), 's')
+            length_us = safe_get_dbus_value(metadata.get('mpris:length'), 'x')
+            self.length = int(length_us) // 1000 if length_us else None
         else:
             self.title = None
             self.url = None
+            self.length = None
 
     async def update_playback_status(self):
         msg = self._player_properties.get('PlaybackStatus')
@@ -338,6 +342,7 @@ class MprisTracker(tracker.TrackerBase):
                 self.msg.debug("No video loaded")
             else:
                 new_show = True
+                self.wait_s = self._percentage_wait_s(player)
 
         if is_new_player and not new_show:
             if probing:
@@ -375,6 +380,16 @@ class MprisTracker(tracker.TrackerBase):
             self.update_show_if_needed(state, show_tuple)
             self._stop_timer()
 
+    def _percentage_wait_s(self, player):
+        # 80% of the episode's actual duration, like Plex/Kodi's own
+        # obey_update_wait_s toggles -- roughly the runtime minus OP/ED.
+        # Falls back to the fixed tracker_update_wait_s (returning None,
+        # which update_timer() treats the same way) if the player hasn't
+        # reported a duration, e.g. right when playback starts.
+        if self.config['mpris_obey_update_wait_s'] or not player.length:
+            return None
+        return round((player.length / 1000) * 0.80)
+
     def _start_timer(self):
         self.resume_timer()
         if not self.timing:
@@ -401,6 +416,14 @@ class MprisTracker(tracker.TrackerBase):
                 self.view_offset = None
                 # The view_offset is not important, so we ignore errors.
                 pass
+
+            # The player may not have reported a duration yet at the
+            # moment playback started (mpris:length arriving a beat
+            # after xesam:title/url is common) -- keep retrying every
+            # tick until it resolves rather than being stuck on the
+            # fixed-wait fallback for the rest of the episode.
+            if self.wait_s is None:
+                self.wait_s = self._percentage_wait_s(self.active_player)
 
         if self.last_show_tuple:
             self.update_timer(self.last_state, self.last_show_tuple)

@@ -12,6 +12,27 @@
             <property name="visible">yes</property>
             <child>
               <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Undo</property>
+                <property name="accelerator">&lt;Primary&gt;Z</property>
+                <property name="visible">yes</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Redo</property>
+                <property name="accelerator">&lt;Primary&gt;&lt;Shift&gt;Z</property>
+                <property name="visible">yes</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
+                <property name="title" translatable="yes">Filter shows</property>
+                <property name="accelerator">slash</property>
+                <property name="visible">yes</property>
+              </object>
+            </child>
+            <child>
+              <object class="GtkShortcutsShortcut">
                 <property name="title" translatable="yes">Synchronize</property>
                 <property name="accelerator">&lt;Primary&gt;S</property>
                 <property name="visible">yes</property>

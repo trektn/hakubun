@@ -69,9 +69,13 @@ class inotifyTracker(inotifyBase.inotifyBase):
                         elif ('IN_CLOSE_NOWRITE' in types
                               or 'IN_CLOSE_WRITE' in types):
                             self._proc_close(path, filename)
-                elif self.last_state != utils.Tracker.NOVIDEO and not self.last_updated:
+                elif (self.last_state != utils.Tracker.NOVIDEO and not self.last_updated
+                      and self.last_show_tuple is not None):
                     # Default blocking duration is 1 second
-                    # This will count down like inotifyx impl. did
+                    # This will count down like inotifyx impl. did.
+                    # (last_show_tuple is None when a video played but no
+                    # matching/promptable show was found -- nothing to
+                    # count down in that case.)
                     self.update_show_if_needed(
                         self.last_state, self.last_show_tuple)
         finally:

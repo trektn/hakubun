@@ -91,7 +91,7 @@ class ShowInfoBox(Gtk.Box):
     def _show_load_finish_idle(self):
         if self.details:
             # Put the returned details into the lines VBox
-            self.label_title.set_text(html.escape(self.details['title']))
+            self.label_title.set_text(self.details['title'])
 
             detail = list()
             for line in self.details['extra']:

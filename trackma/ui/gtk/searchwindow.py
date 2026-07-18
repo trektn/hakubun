@@ -75,6 +75,11 @@ class SearchWindow(Gtk.Window):
         self._current_status = current_status
         self._search_thread = None
 
+        # Shows already in the user's list, so search results can be
+        # highlighted instead of letting the user accidentally re-add
+        # or lose track of something they're already tracking.
+        self._mylist = {show['id']: show for show in self._engine.get_list()}
+
         self.showlist = SearchTreeView(colors)
         self.showlist.get_selection().connect("changed", self._on_selection_changed)
         self.showlist.set_size_request(250, 350)
@@ -127,7 +132,12 @@ class SearchWindow(Gtk.Window):
         self.showlist.append_start()
         for show in entries:
             self._showdict[show['id']] = show
-            self.showlist.append(show)
+            mylist_entry = self._mylist.get(show['id'])
+            in_list_label = None
+            if mylist_entry:
+                statuses_dict = self._engine.mediainfo['statuses_dict']
+                in_list_label = statuses_dict.get(mylist_entry['my_status'], '?')
+            self.showlist.append(show, in_list_label)
         self.showlist.append_finish()
 
         self.btn_add_show.set_sensitive(False)
@@ -150,8 +160,33 @@ class SearchWindow(Gtk.Window):
         return None
 
     def _add_show(self, show):
+        mediainfo = self._engine.mediainfo
+        statuses = mediainfo['statuses']
+        statuses_dict = mediainfo['statuses_dict']
+
+        # Default status is configurable (Preferences > Behavior): either the
+        # currently active tab, or the API's "Plan to Watch" status (the
+        # last entry of `statuses` by convention across every backend --
+        # `statuses_start` is a different thing: the status a show flips to
+        # once you start watching it, e.g. "current"/"CURRENT"). Either way
+        # we always confirm before adding, so a show is never silently
+        # dropped into whatever tab happened to be active (e.g. Dropped).
+        default_status = self._current_status
+        if self._engine.get_config('add_dialog_default_status') == 'start' \
+                and statuses:
+            default_status = statuses[-1]
+
+        dialog = AddStatusDialog(
+            self, show['title'], statuses, statuses_dict, default_status)
+        response = dialog.run()
+        chosen_status = dialog.chosen_status()
+        dialog.destroy()
+
+        if response != Gtk.ResponseType.OK:
+            return
+
         try:
-            self._engine.add_show(show, self._current_status)
+            self._engine.add_show(show, chosen_status)
         except utils.TrackmaError as e:
             self.emit('search-error', e)
 
@@ -168,12 +203,19 @@ class SearchWindow(Gtk.Window):
 
 
 class SearchTreeView(Gtk.TreeView):
+    # Subtle highlight for a result already present in the user's list, so
+    # it's not confused with a brand new show (see also Qt's AddTableModel
+    # / AddListDelegate). Always light, so cells force dark text over it
+    # regardless of the app's theme.
+    IN_LIST_COLOR = '#d2e6ff'
+    IN_LIST_TEXT_COLOR = '#1e1e1e'
+
     def __init__(self, colors):
         Gtk.TreeView.__init__(self)
 
         self.cols = dict()
         i = 1
-        for name in ('Title', 'Type', 'Total'):
+        for name in ('Title', 'Type', 'Season', 'Total', 'In Your List'):
             self.cols[name] = Gtk.TreeViewColumn(name)
             self.cols[name].set_sort_column_id(i)
             self.append_column(self.cols[name])
@@ -188,17 +230,34 @@ class SearchTreeView(Gtk.TreeView):
         self.cols['Title'].set_resizable(True)
         self.cols['Title'].set_expand(False)
         self.cols['Title'].add_attribute(renderer_title, 'text', 1)
-        self.cols['Title'].add_attribute(renderer_title, 'foreground', 4)
+        self.cols['Title'].add_attribute(renderer_title, 'foreground', 6)
+        self.cols['Title'].add_attribute(renderer_title, 'background', 7)
 
         renderer_type = Gtk.CellRendererText()
         self.cols['Type'].pack_start(renderer_type, False)
         self.cols['Type'].add_attribute(renderer_type, 'text', 2)
+        self.cols['Type'].add_attribute(renderer_type, 'foreground', 8)
+        self.cols['Type'].add_attribute(renderer_type, 'background', 7)
+
+        renderer_season = Gtk.CellRendererText()
+        self.cols['Season'].pack_start(renderer_season, False)
+        self.cols['Season'].add_attribute(renderer_season, 'text', 3)
+        self.cols['Season'].add_attribute(renderer_season, 'foreground', 8)
+        self.cols['Season'].add_attribute(renderer_season, 'background', 7)
 
         renderer_total = Gtk.CellRendererText()
         self.cols['Total'].pack_start(renderer_total, False)
-        self.cols['Total'].add_attribute(renderer_total, 'text', 3)
+        self.cols['Total'].add_attribute(renderer_total, 'text', 4)
+        self.cols['Total'].add_attribute(renderer_total, 'foreground', 8)
+        self.cols['Total'].add_attribute(renderer_total, 'background', 7)
 
-        self.store = Gtk.ListStore(str, str, str, str, str)
+        renderer_in_list = Gtk.CellRendererText()
+        self.cols['In Your List'].pack_start(renderer_in_list, False)
+        self.cols['In Your List'].add_attribute(renderer_in_list, 'text', 5)
+        self.cols['In Your List'].add_attribute(renderer_in_list, 'foreground', 8)
+        self.cols['In Your List'].add_attribute(renderer_in_list, 'background', 7)
+
+        self.store = Gtk.ListStore(str, str, str, str, str, str, str, str, str)
         self.set_model(self.store)
 
         self.colors = colors
@@ -207,22 +266,86 @@ class SearchTreeView(Gtk.TreeView):
         self.freeze_child_notify()
         self.store.clear()
 
-    def append(self, show):
-        if show['status'] == 1:
-            color = self.colors['is_airing']
-        elif show['status'] == 3:
-            color = self.colors['not_aired']
+    def append(self, show, in_list_label=None):
+        if show['status'] == utils.Status.AIRING:
+            title_color = self.colors['is_airing']
+        elif show['status'] == utils.Status.NOTYET:
+            title_color = self.colors['not_aired']
         else:
-            color = None
+            title_color = None
+
+        row_bg = self.IN_LIST_COLOR if in_list_label else None
+        # Cells with no dedicated color (Type/Season/Total/In Your List,
+        # and Title when it has no airing-status color of its own) would
+        # otherwise fall back to the theme's default text color, which can
+        # be unreadable against the always-light highlight background.
+        other_fg = self.IN_LIST_TEXT_COLOR if in_list_label else None
+        if title_color is None and in_list_label:
+            title_color = self.IN_LIST_TEXT_COLOR
 
         row = [
             str(show['id']),
             str(show['title']),
             str(show['type']),
+            utils.get_season_label(show),
             str(show['total']),
-            color]
+            in_list_label or '',
+            title_color,
+            row_bg,
+            other_fg]
         self.store.append(row)
 
     def append_finish(self):
         self.thaw_child_notify()
         self.store.set_sort_column_id(1, Gtk.SortType.ASCENDING)
+
+
+class AddStatusDialog(Gtk.Dialog):
+    """
+    Confirmation dialog shown before adding a show to the list.
+
+    Lets the user choose which status to add the show under instead of
+    silently inheriting whatever tab happens to be active. This prevents
+    accidentally adding a show to Dropped or On Hold when auto-sync is on.
+    """
+
+    def __init__(self, parent, show_title, statuses, statuses_dict, default_status):
+        Gtk.Dialog.__init__(self, "Add to list", parent, Gtk.DialogFlags.MODAL)
+        self.set_default_size(340, -1)
+
+        self.add_button("_Cancel", Gtk.ResponseType.CANCEL)
+        add_btn = self.add_button("_Add", Gtk.ResponseType.OK)
+        add_btn.get_style_context().add_class("suggested-action")
+        self.set_default_response(Gtk.ResponseType.OK)
+
+        title_label = Gtk.Label(label="<b>%s</b>" % GLib.markup_escape_text(show_title))
+        title_label.set_use_markup(True)
+        title_label.set_line_wrap(True)
+        title_label.set_xalign(0)
+
+        status_label = Gtk.Label(label="Add as:")
+        status_label.set_xalign(0)
+
+        self._status_combo = Gtk.ComboBoxText()
+        default_index = 0
+        for i, status in enumerate(statuses):
+            self._status_combo.append(str(status), statuses_dict[status])
+            if status == default_status:
+                default_index = i
+        self._status_combo.set_active(default_index)
+
+        status_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=9)
+        status_row.pack_start(status_label, False, False, 0)
+        status_row.pack_start(self._status_combo, True, True, 0)
+
+        content = self.get_content_area()
+        content.set_spacing(12)
+        content.set_border_width(12)
+        content.pack_start(title_label, False, False, 0)
+        content.pack_start(status_row, False, False, 0)
+
+        self.show_all()
+
+    def chosen_status(self):
+        """Returns the status value selected by the user."""
+        return self._status_combo.get_active_id()

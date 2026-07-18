@@ -257,15 +257,37 @@ class TrackerBase(object):
                         filename = filename[len(watch_prefix):].lstrip(os.path.sep)
                         break
 
-            # Invoke the parser to extract show title and episode.
-            aie = self.parser_class(self.msg, filename)
-            (show_title, show_ep) = (aie.getName(), aie.getEpisode())
+            # Invoke the parser to extract show title and episode. Try the
+            # basename alone first -- that's what the parser is actually
+            # designed for. "Check subdirectory name when searching"
+            # (library_full_path) makes `filename` the whole relative
+            # path instead, which helps when the filename alone doesn't
+            # carry a title, but feeding a multi-segment path (e.g. a
+            # "Season 01" folder between a same-named show folder and
+            # file) to the parser as one blob can garble the guessed
+            # title into a doubled mess. So only fall back to the full
+            # path if the basename alone doesn't find a match.
+            basename = os.path.basename(filename)
+            candidates = [basename]
+            if filename != basename:
+                candidates.append(filename)
+
+            show_title = None
+            show_ep = None
+            playing_show = None
+            for candidate in candidates:
+                aie = self.parser_class(self.msg, candidate)
+                (show_title, show_ep) = (aie.getName(), aie.getEpisode())
+                if not show_title:
+                    continue
+                playing_show = utils.guess_show(show_title, self.list)
+                self.msg.debug("Show guess: {}: {} - {}".format(show_title, playing_show, show_ep))
+                if playing_show:
+                    break
+
             if not show_title:
                 # Format not recognized
                 return (utils.Tracker.UNRECOGNIZED, None)
-
-            playing_show = utils.guess_show(show_title, self.list)
-            self.msg.debug("Show guess: {}: {} - {}".format(show_title, playing_show, show_ep))
 
             if playing_show:
                 (redirected_show, redirected_ep) = utils.redirect_show(

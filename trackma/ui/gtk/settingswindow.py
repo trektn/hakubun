@@ -16,7 +16,7 @@
 
 import os
 
-from gi.repository import Gdk, Gtk, Pango
+from gi.repository import GObject, Gdk, Gtk, Pango
 
 from trackma import utils
 from trackma.ui.gtk import gtk_dir
@@ -44,6 +44,10 @@ def getColor(colorString):
 class SettingsWindow(Gtk.Window):
 
     __gtype_name__ = 'SettingsWindow'
+
+    __gsignals__ = {
+        'settings-saved': (GObject.SignalFlags.RUN_FIRST, None, ())
+    }
 
     btn_save = Gtk.Template.Child()
     switch_tracker = Gtk.Template.Child()
@@ -73,6 +77,7 @@ class SettingsWindow(Gtk.Window):
     entry_jellyfin_username = Gtk.Template.Child()
     entry_jellyfin_api_key = Gtk.Template.Child()
 
+    checkbox_mpris_obey_update_wait = Gtk.Template.Child()
     checkbox_tracker_update_close = Gtk.Template.Child()
     checkbox_tracker_update_prompt = Gtk.Template.Child()
     checkbox_tracker_not_found_prompt = Gtk.Template.Child()
@@ -95,12 +100,17 @@ class SettingsWindow(Gtk.Window):
     checkbox_auto_status_change_if_scored = Gtk.Template.Child()
     checkbox_auto_date_change = Gtk.Template.Child()
 
+    combo_add_dialog_default_status = Gtk.Template.Child()
+    combo_kitsu_api = Gtk.Template.Child()
+    checkbox_sync_on_settings_apply = Gtk.Template.Child()
+
     checkbox_show_tray = Gtk.Template.Child()
     checkbox_close_to_tray = Gtk.Template.Child()
     checkbox_start_in_tray = Gtk.Template.Child()
     checkbox_tray_api_icon = Gtk.Template.Child()
     checkbox_remember_geometry = Gtk.Template.Child()
     checkbox_classic_progress = Gtk.Template.Child()
+    checkbox_add_mal_scores = Gtk.Template.Child()
 
     colorbutton_rows_playing = Gtk.Template.Child()
     colorbutton_rows_queued = Gtk.Template.Child()
@@ -201,6 +211,8 @@ class SettingsWindow(Gtk.Window):
 
         self.spin_tracker_update_wait.set_value(
             self.engine.get_config('tracker_update_wait_s'))
+        self.checkbox_mpris_obey_update_wait.set_active(
+            self.engine.get_config('mpris_obey_update_wait_s'))
         self.checkbox_tracker_update_close.set_active(
             self.engine.get_config('tracker_update_close'))
         self.checkbox_tracker_update_prompt.set_active(
@@ -240,6 +252,15 @@ class SettingsWindow(Gtk.Window):
             self.engine.get_config('auto_status_change_if_scored'))
         self.checkbox_auto_date_change.set_active(
             self.engine.get_config('auto_date_change'))
+        self.checkbox_add_mal_scores.set_active(
+            self.engine.get_config('auto_add_mal_scores'))
+
+        self.combo_add_dialog_default_status.set_active_id(
+            self.engine.get_config('add_dialog_default_status'))
+        self.checkbox_sync_on_settings_apply.set_active(
+            self.engine.get_config('sync_on_settings_apply'))
+        self.combo_kitsu_api.set_active_id(
+            self.engine.get_config('kitsu_api'))
 
         self.checkbox_show_tray.set_active(self.config['show_tray'])
         self.checkbox_close_to_tray.set_active(self.config['close_to_tray'])
@@ -286,6 +307,7 @@ class SettingsWindow(Gtk.Window):
     @Gtk.Template.Callback()
     def _on_btn_save_clicked(self, btn):
         self.save_config()
+        self.emit('settings-saved')
         self.destroy()
 
     @Gtk.Template.Callback()
@@ -401,6 +423,8 @@ class SettingsWindow(Gtk.Window):
             'autosend_at_exit', self.checkbox_upload_exit.get_active())
         self.engine.set_config('tracker_update_wait_s',
                                self.spin_tracker_update_wait.get_value_as_int())
+        self.engine.set_config('mpris_obey_update_wait_s',
+                               self.checkbox_mpris_obey_update_wait.get_active())
         self.engine.set_config('tracker_update_close',
                                self.checkbox_tracker_update_close.get_active())
         self.engine.set_config('tracker_update_prompt',
@@ -452,6 +476,14 @@ class SettingsWindow(Gtk.Window):
                                self.checkbox_auto_status_change_if_scored.get_active())
         self.engine.set_config(
             'auto_date_change', self.checkbox_auto_date_change.get_active())
+        self.engine.set_config(
+            'auto_add_mal_scores', self.checkbox_add_mal_scores.get_active())
+        self.engine.set_config(
+            'add_dialog_default_status', self.combo_add_dialog_default_status.get_active_id())
+        self.engine.set_config(
+            'sync_on_settings_apply', self.checkbox_sync_on_settings_apply.get_active())
+        self.engine.set_config(
+            'kitsu_api', self.combo_kitsu_api.get_active_id())
         self.engine.save_config()
 
         """GTK Interface configuration"""

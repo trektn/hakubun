@@ -25,7 +25,7 @@ from trackma import utils
 from trackma.ui.gtk import gtk_dir
 from trackma.ui.gtk.imagebox import ImageBox
 from trackma.ui.gtk.showeventtype import ShowEventType
-from trackma.ui.gtk.showtreeview import ShowListFilter, ShowListStore, ShowTreeView
+from trackma.ui.gtk.showtreeview import DRAG_TARGETS, ShowListFilter, ShowListStore, ShowTreeView
 
 
 @Gtk.Template.from_file(os.path.join(gtk_dir, 'data/mainview.ui'))
@@ -57,6 +57,7 @@ class MainView(Gtk.Box):
     btn_episode_add = Gtk.Template.Child()
     btn_play_next = Gtk.Template.Child()
     spinbtn_score = Gtk.Template.Child()
+    scale_score = Gtk.Template.Child()
     btn_score_set = Gtk.Template.Child()
     statusbox = Gtk.Template.Child()
     statusmodel = Gtk.Template.Child()
@@ -129,6 +130,7 @@ class MainView(Gtk.Box):
         self.btn_play_next.connect(
             "clicked", self._on_btn_play_next_clicked, True)
         self.spinbtn_score.connect("activate", self._on_spinbtn_score_activate)
+        self.spinbtn_score.connect("output", self._on_spinbtn_score_output)
         self.btn_score_set.connect("clicked", self._on_spinbtn_score_activate)
         self.statusbox_handler = self.statusbox.connect(
             "changed", self._on_statusbox_changed)
@@ -140,6 +142,8 @@ class MainView(Gtk.Box):
             'episode_changed', self._on_changed_show_idle)
         self._engine.connect_signal(
             'score_changed', self._on_changed_show_idle)
+        self._engine.connect_signal(
+            'mal_score_changed', self._on_changed_show_idle)
         self._engine.connect_signal(
             'status_changed', self._on_changed_show_status_idle)
         self._engine.connect_signal('playing', self._on_playing_show_idle)
@@ -247,6 +251,15 @@ class MainView(Gtk.Box):
         # Insert pages
         for status in statuses_nums:
             page_title = Gtk.Label(label=statuses_names[status])
+            if status is not None:
+                # Lets a show be dragged from its list onto a different
+                # status tab to change its status (drag source is set up
+                # on ShowTreeView). The "All" tab (status=None) isn't a
+                # real status, so it's not a valid drop target.
+                page_title.drag_dest_set(
+                    Gtk.DestDefaults.ALL, DRAG_TARGETS, Gdk.DragAction.MOVE)
+                page_title.connect(
+                    'drag-data-received', self._on_tab_drag_data_received, status)
             self._pages[status] = NotebookPage(self._engine,
                                                self.notebook.get_n_pages(),
                                                status,
@@ -305,19 +318,21 @@ class MainView(Gtk.Box):
         self.statusbox.show_all()
 
     def _set_score_ranges(self):
-        score_decimal_places = 0
-        if isinstance(self._engine.mediainfo['score_step'], float):
-            score_decimal_places = len(
-                str(self._engine.mediainfo['score_step']).split('.')[1])
+        mediainfo = self._engine.mediainfo
+        display_max, display_step, decimals = utils.score_display_range(mediainfo)
+        factor = utils.score_display_factor(mediainfo)
 
+        # scale_score and spinbtn_score share score_adjustment, so setting
+        # it here keeps both widgets in sync automatically.
         self.spinbtn_score.set_value(0)
-        self.spinbtn_score.set_digits(score_decimal_places)
-        self.spinbtn_score.set_range(0, self._engine.mediainfo['score_max'])
-        self.spinbtn_score.get_adjustment().set_step_increment(
-            self._engine.mediainfo['score_step'])
+        self.spinbtn_score.set_digits(decimals)
+        self.spinbtn_score.set_range(0, display_max)
+        self.spinbtn_score.get_adjustment().set_step_increment(display_step)
+        self.scale_score.set_digits(decimals)
 
         for view in self._pages.values():
-            view.decimals = score_decimal_places
+            view.decimals = decimals
+            view.factor = factor
 
     def set_status_idle(self, msg):
         # Thread safe
@@ -348,6 +363,7 @@ class MainView(Gtk.Box):
 
             self.btn_score_set.set_sensitive(boolean)
             self.spinbtn_score.set_sensitive(boolean)
+            self.scale_score.set_sensitive(boolean)
             self.statusbox.set_sensitive(boolean)
 
     def _on_btn_episode_remove_clicked(self, widget):
@@ -385,8 +401,17 @@ class MainView(Gtk.Box):
                   ShowEventType.PLAY_NEXT,
                   (self._current_page.selected_show,))
 
+    def _on_spinbtn_score_output(self, widget):
+        adjustment = widget.get_adjustment()
+        if adjustment.get_value() == adjustment.get_lower():
+            widget.set_text('Unrated')
+            return True
+        return False
+
     def _on_spinbtn_score_activate(self, widget):
-        score = round(self.spinbtn_score.get_value(), self.spinbtn_score.get_digits())
+        display_score = round(self.spinbtn_score.get_value(), self.spinbtn_score.get_digits())
+        score = utils.score_to_raw(display_score, self._engine.mediainfo)
+        score = round(score, utils.decimal_places(self._engine.mediainfo['score_step']))
         self.emit('show-action',
                   ShowEventType.SET_SCORE,
                   (self._current_page.selected_show, score))
@@ -397,6 +422,24 @@ class MainView(Gtk.Box):
         self.emit('show-action',
                   ShowEventType.SET_STATUS,
                   (self._current_page.selected_show, status))
+
+    def filter_shows(self, query):
+        """Filters every tab's list down to shows whose title matches
+        query (called from the search bar owned by TrackmaWindow)."""
+        for page in self._pages.values():
+            page.show_tree_view.get_model().props.model.set_search_query(query)
+
+    def _on_tab_drag_data_received(self, widget, drag_context, x, y, data, info, time, status):
+        # get_text() only recognizes atoms GTK considers text MIME types,
+        # which our custom target isn't, so read the raw bytes instead.
+        raw = data.get_data()
+        if not raw:
+            return
+        try:
+            showid = int(raw.decode('utf-8'))
+        except (ValueError, UnicodeDecodeError):
+            return
+        self.emit('show-action', ShowEventType.SET_STATUS, (showid, status))
 
     def message_handler(self, classname, msgtype, msg):
         # Thread safe
@@ -415,7 +458,7 @@ class MainView(Gtk.Box):
         self._list.update(show)
         if self._current_page and show['id'] == self._current_page.selected_show:
             self.btn_episode_show_entry.set_label(str(show['my_progress']))
-            self.spinbtn_score.set_value(show['my_score'])
+            self.spinbtn_score.set_value(utils.score_to_display(show['my_score'], self._engine.mediainfo))
 
     def change_show_title_idle(self, show, altname):
         GLib.idle_add(self._update_show_title, show, altname)
@@ -434,6 +477,11 @@ class MainView(Gtk.Box):
             self._list.update_or_append(show)
         except utils.EngineError:
             self._list.remove(show)
+        # TreeModelFilter doesn't re-run its visible_func on a row-changed
+        # signal from the child model, so a status change won't move the
+        # row between tab filters until we ask it to explicitly.
+        self._refilter_page(old_status)
+        self._refilter_page(status)
         pagenumber = self._pages[status].pagenumber
         current_page = self.notebook.get_current_page()
         if current_page != pagenumber:
@@ -442,6 +490,12 @@ class MainView(Gtk.Box):
                 self._pages[status].show_tree_view.select(show)
             else:
                 self._pages[None].show_tree_view.select(show)
+
+    def _refilter_page(self, status):
+        if status not in self._pages:
+            return
+        show_filter = self._pages[status].show_tree_view.get_model().props.model
+        show_filter.refilter()
 
     def _on_playing_show_idle(self, show, is_playing, episode):
         GLib.idle_add(self._set_show_playing, show, is_playing, episode)
@@ -509,7 +563,7 @@ class MainView(Gtk.Box):
                 break
 
         # Score selector
-        self.spinbtn_score.set_value(show['my_score'])
+        self.spinbtn_score.set_value(utils.score_to_display(show['my_score'], self._engine.mediainfo))
 
         # Image
         if show.get('image_thumb') or show.get('image'):
@@ -534,7 +588,6 @@ class MainView(Gtk.Box):
         self.emit('show-action', event_type, data)
 
     def get_current_status(self):
-        print(self._engine.mediainfo['statuses'])
         return self._current_page.status if self._current_page.status is not None else self._engine.mediainfo['statuses'][-1]
 
     def get_selected_show(self):
@@ -634,6 +687,14 @@ class NotebookPage(Gtk.ScrolledWindow):
         self._list.decimals = decimals
 
     @property
+    def factor(self):
+        return self._list.factor
+
+    @factor.setter
+    def factor(self, factor):
+        self._list.factor = factor
+
+    @property
     def status(self):
         return self._status
 
@@ -697,6 +758,8 @@ class NotebookPage(Gtk.ScrolledWindow):
         mb_info.connect("activate",
                         self._on_mb_activate,
                         ShowEventType.DETAILS)
+        mb_move_to = Gtk.MenuItem("Move to")
+        mb_move_to.set_submenu(self._build_move_to_menu())
         mb_web = Gtk.MenuItem("Open web site")
         mb_web.connect("activate",
                        self._on_mb_activate,
@@ -730,6 +793,7 @@ class NotebookPage(Gtk.ScrolledWindow):
         menu.append(mb_playep)
 
         menu.append(mb_info)
+        menu.append(mb_move_to)
         menu.append(mb_web)
         menu.append(mb_folder)
         menu.append(Gtk.SeparatorMenuItem())
@@ -741,6 +805,23 @@ class NotebookPage(Gtk.ScrolledWindow):
         menu.show_all()
         menu.popup_at_pointer(event)
 
+    def _build_move_to_menu(self):
+        mediainfo = self._engine.mediainfo
+        menu_move_to = Gtk.Menu()
+        for status in mediainfo['statuses']:
+            mb_status = Gtk.MenuItem(mediainfo['statuses_dict'][status])
+            mb_status.connect("activate",
+                              self._on_mb_activate,
+                              ShowEventType.SET_STATUS, status)
+            menu_move_to.append(mb_status)
+        menu_move_to.show_all()
+        return menu_move_to
+
+    # Above this many episodes a flat per-episode menu turns into an
+    # unusable wall of items -- fall back to a "Play episode..." dialog
+    # with a spin button instead (see Window._play_episode_pick).
+    EPISODE_MENU_LIMIT = 50
+
     def _build_episode_menu(self, show):
         library_episodes = set(self._engine.library().get(show['id'], ()))
         total = show['total'] or max(
@@ -751,6 +832,15 @@ class NotebookPage(Gtk.ScrolledWindow):
         next_ep = show['my_progress'] + 1
 
         menu_eps = Gtk.Menu()
+
+        if total > self.EPISODE_MENU_LIMIT:
+            mb_pick = Gtk.MenuItem("Play episode...")
+            mb_pick.connect("activate",
+                            self._on_mb_activate,
+                            ShowEventType.PLAY_EPISODE_PICK)
+            menu_eps.append(mb_pick)
+            return menu_eps
+
         for i in range(1, total + 1):
             mb_playep = Gtk.CheckMenuItem(str(i))
             if i == next_ep:

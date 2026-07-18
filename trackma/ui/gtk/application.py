@@ -72,6 +72,8 @@ class TrackmaApplication(Gtk.Application):
             ('win.upload', '<Primary>E'),
             ('win.download', '<Primary>D'),
             ('win.scanfiles', '<Primary>L'),
+            ('win.undo', '<Primary>Z'),
+            ('win.redo', ('<Primary><Shift>Z', '<Primary>Y')),
             ('win.show-help-overlay', '<Primary>question'),
             ('app.quit', '<Primary>Q'),
 

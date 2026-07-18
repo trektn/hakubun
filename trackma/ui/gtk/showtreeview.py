@@ -17,6 +17,10 @@ from gi.repository import GObject, Gdk, Gtk, Pango
 
 from trackma import utils
 
+# Used to drag a show from a status tab's list onto a different status
+# tab's label to change its status (see ShowTreeView / MainView).
+DRAG_TARGETS = [Gtk.TargetEntry.new('application/x-trackma-showid', 0, 0)]
+
 
 class ShowListStore(Gtk.ListStore):
     __cols = (
@@ -38,13 +42,21 @@ class ShowListStore(Gtk.ListStore):
         ('my-status', str),
         ('status', int),
         ('last-updated', str),
-        ('last-updated-timestamp', float)
+        ('last-updated-timestamp', float),
+        ('season', str),
+        ('type', str),
+        ('platform-score', str),
+        ('mal-score', str),
     )
 
-    def __init__(self, decimals=0, colors=dict()):
+    def __init__(self, decimals=0, factor=1, colors=dict()):
         super().__init__(*self.__class__.__columns__())
         self.colors = colors
         self.decimals = decimals
+        # Display-only multiplier (see utils.score_display_factor) so the
+        # Score column matches what the sidebar shows, e.g. Kitsu's raw
+        # 0-5/.25 scale displayed as 0-10/.5.
+        self.factor = factor
         self.set_sort_column_id(1, Gtk.SortType.ASCENDING)
 
     @staticmethod
@@ -92,7 +104,7 @@ class ShowListStore(Gtk.ListStore):
         if altname:
             title_str += " [%s]" % altname
 
-        score_str = "%0.*f" % (self.decimals, show['my_score'])
+        score_str = "%0.*f" % (self.decimals, show['my_score'] * self.factor)
         aired_eps = utils.estimate_aired_episodes(show)
 
         if eps:
@@ -127,6 +139,10 @@ class ShowListStore(Gtk.ListStore):
                show['status'],
                my_last_update,
                my_last_update_timestamp,
+               utils.get_season_label(show),
+               str(show['type']),
+               show.get('platform_score') or '-',
+               show.get('mal_score') or '-',
                ]
         super().append(row)
 
@@ -148,7 +164,7 @@ class ShowListStore(Gtk.ListStore):
             row[2] = show['my_progress']
             row[4] = episodes_str
 
-            score_str = "%0.*f" % (self.decimals, show['my_score'])
+            score_str = "%0.*f" % (self.decimals, show['my_score'] * self.factor)
 
             row[3] = show['my_score']
             row[5] = score_str
@@ -157,8 +173,12 @@ class ShowListStore(Gtk.ListStore):
 
             my_last_update = show['my_last_update']
 
-            row[17] = utils.format_local_time(last_update_date)
+            row[17] = utils.format_local_time(my_last_update)
             row[18] = show['my_last_update'].timestamp() if show['my_last_update'] is not None else 0
+            row[19] = utils.get_season_label(show)
+            row[20] = str(show['type'])
+            row[21] = show.get('platform_score') or '-'
+            row[22] = show.get('mal_score') or '-'
         return
 
         # print("Warning: Show ID not found in ShowView (%d)" % show['id'])
@@ -199,9 +219,20 @@ class ShowListFilter(Gtk.TreeModelFilter):
         )
         self.set_visible_func(self.status_filter)
         self._status = status
+        self._search_query = ''
+
+    def set_search_query(self, query):
+        self._search_query = (query or '').strip().lower()
+        self.refilter()
 
     def status_filter(self, model, iterator, data):
-        return self._status is None or model[iterator][15] == self._status
+        if self._status is not None and model[iterator][15] != self._status:
+            return False
+        if self._search_query:
+            title = (model[iterator][1] or '').lower()
+            if self._search_query not in title:
+                return False
+        return True
 
     def get_value(self, obj, key='id'):
         try:
@@ -225,10 +256,19 @@ class ShowTreeView(Gtk.TreeView):
         self.visible_columns = visible_columns
         self.progress_style = progress_style
 
-        self.set_enable_search(True)
-        self.set_search_column(1)
+        # GTK's own interactive search (which pops up on any typed
+        # character and just jumps to a matching row) is superseded by
+        # the real list-filtering search bar (MainView.reveal_search),
+        # and would otherwise steal the '/' keypress that opens it.
+        self.set_enable_search(False)
         self.set_property('has-tooltip', True)
         self.connect('query-tooltip', self.show_tooltip)
+
+        # Lets a row be dragged onto a status tab (see MainView) to change
+        # that show's status, instead of only via the status dropdown.
+        self.enable_model_drag_source(
+            Gdk.ModifierType.BUTTON1_MASK, DRAG_TARGETS, Gdk.DragAction.MOVE)
+        self.connect('drag-data-get', self._on_drag_data_get)
 
         self.cols = dict()
         self.available_columns = (
@@ -241,6 +281,10 @@ class ShowTreeView(Gtk.TreeView):
             ('My start', 13),
             ('My end', 14),
             ('Last updated', 17),
+            ('Season', 19),
+            ('Type', 20),
+            ('Platform Score', 21),
+            ('MAL Score', 22),
         )
 
         for (name, sort) in self.available_columns:
@@ -321,6 +365,28 @@ class ShowTreeView(Gtk.TreeView):
         renderer = Gtk.CellRendererText()
         self.cols['Last updated'].pack_start(renderer, False)
         self.cols['Last updated'].add_attribute(renderer, 'text', 17)
+        renderer = Gtk.CellRendererText()
+        self.cols['Season'].pack_start(renderer, False)
+        self.cols['Season'].add_attribute(renderer, 'text', 19)
+        renderer = Gtk.CellRendererText()
+        self.cols['Type'].pack_start(renderer, False)
+        self.cols['Type'].add_attribute(renderer, 'text', 20)
+        renderer = Gtk.CellRendererText()
+        self.cols['Platform Score'].pack_start(renderer, False)
+        self.cols['Platform Score'].add_attribute(renderer, 'text', 21)
+        renderer = Gtk.CellRendererText()
+        self.cols['MAL Score'].pack_start(renderer, False)
+        self.cols['MAL Score'].add_attribute(renderer, 'text', 22)
+
+    def _on_drag_data_get(self, widget, drag_context, data, info, time):
+        model, treeiter = self.get_selection().get_selected()
+        if treeiter is None:
+            return
+        showid = model.get_value(treeiter, ShowListStore.column('id'))
+        if showid is not None:
+            # set_text()/get_text() only work for atoms GTK recognizes as
+            # text MIME types; our custom target needs the raw data API.
+            data.set(data.get_target(), 8, str(showid).encode('utf-8'))
 
     def _header_button_press(self, button, event):
         if event.button == 3:
