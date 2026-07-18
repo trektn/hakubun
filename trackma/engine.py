@@ -15,7 +15,6 @@
 #
 
 import datetime
-import json
 import os
 import random
 import re
@@ -24,8 +23,6 @@ import shutil
 import sys
 import threading
 import time
-import urllib.error
-import urllib.request
 from collections import deque
 from decimal import Decimal
 from functools import lru_cache, partial
@@ -92,13 +89,6 @@ class Engine:
     # making doomed requests -- rerunning later picks up whatever's still
     # missing.
     MAL_SCORE_CONSECUTIVE_FAILURE_LIMIT = 8
-
-    # AniList's public GraphQL API has the best airing-schedule support of
-    # any backend Trackma talks to, and it's queryable unauthenticated by
-    # MAL id -- so the airing schedule is always cross-referenced from
-    # here regardless of which backend the account itself uses.
-    ANILIST_GRAPHQL_URL = 'https://graphql.anilist.co'
-    AIRING_SCHEDULE_BATCH = 50
 
     def __init__(self, account=None, message_handler=None, accountnum=None):
         self.msg = messenger.Messenger(message_handler, self.name)
@@ -612,77 +602,6 @@ class Engine:
             details['extra'] = list(details.get('extra') or []) + \
                 [('MAL Score', show['mal_score'])]
         return details
-
-    def get_airing_schedule(self):
-        """
-        Cross-references the airing shows in the list against AniList's
-        public API (by MAL id) to find when each one's next episode airs.
-
-        Returns a list of {'show': <show dict>, 'episode': int,
-        'airing_at': aware UTC datetime}, sorted by airing_at. Shows
-        without a resolvable mal_id, or that AniList doesn't have a
-        schedule for, are silently skipped.
-        """
-        shows = [s for s in self.data_handler.get().values()
-                if s.get('mal_id') and s.get('status') == utils.Status.AIRING]
-        if not shows:
-            return []
-
-        # Some shows can share a mal_id after a redirection merge; keep
-        # the first one seen rather than fetching duplicates.
-        by_mal_id = {}
-        for show in shows:
-            by_mal_id.setdefault(show['mal_id'], show)
-
-        query = '''
-        query ($ids: [Int], $perPage: Int) {
-          Page(page: 1, perPage: $perPage) {
-            media(idMal_in: $ids, type: ANIME) {
-              idMal
-              nextAiringEpisode { airingAt episode }
-            }
-          }
-        }'''
-
-        schedule = []
-        mal_ids = list(by_mal_id.keys())
-        for offset in range(0, len(mal_ids), self.AIRING_SCHEDULE_BATCH):
-            batch = mal_ids[offset:offset + self.AIRING_SCHEDULE_BATCH]
-            data = self._anilist_public_query(
-                query, {'ids': batch, 'perPage': self.AIRING_SCHEDULE_BATCH})
-
-            for media in data['data']['Page']['media']:
-                next_ep = media.get('nextAiringEpisode')
-                if not next_ep:
-                    continue
-                show = by_mal_id.get(media['idMal'])
-                if not show:
-                    continue
-                schedule.append({
-                    'show': show,
-                    'episode': next_ep['episode'],
-                    'airing_at': datetime.datetime.fromtimestamp(
-                        next_ep['airingAt'], tz=datetime.timezone.utc),
-                })
-
-        schedule.sort(key=lambda entry: entry['airing_at'])
-        return schedule
-
-    def _anilist_public_query(self, query, variables):
-        payload = json.dumps(
-            {'query': query, 'variables': variables}).encode('utf-8')
-        request = urllib.request.Request(
-            self.ANILIST_GRAPHQL_URL, payload,
-            headers={
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-                'User-Agent': 'Trackma/%s' % utils.VERSION,
-            })
-        try:
-            with urllib.request.urlopen(request, timeout=10) as response:
-                return json.loads(response.read().decode('utf-8'))
-        except (urllib.error.HTTPError, urllib.error.URLError) as e:
-            raise utils.EngineError("Could not fetch airing schedule: %s" % e)
 
     def regex_list(self, regex):
         """

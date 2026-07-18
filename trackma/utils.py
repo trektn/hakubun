@@ -760,7 +760,6 @@ qt_defaults = {
     },
     'sort_index': 1,
     'sort_order': 0,
-    'taiga_mode': False,
 }
 
 qt_per_api_defaults = {

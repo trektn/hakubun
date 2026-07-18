@@ -26,7 +26,6 @@ from trackma.engine import Engine
 from trackma.ui.gtk import gtk_dir
 from trackma.ui.gtk.accountswindow import AccountsWindow
 from trackma.ui.gtk.mainview import MainView
-from trackma.ui.gtk.airingwindow import AiringScheduleWindow
 from trackma.ui.gtk.searchwindow import SearchWindow
 from trackma.ui.gtk.settingswindow import SettingsWindow
 from trackma.ui.gtk.showeventtype import ShowEventType
@@ -40,7 +39,6 @@ class TrackmaWindow(Gtk.ApplicationWindow):
 
     btn_appmenu = Gtk.Template.Child()
     btn_search = Gtk.Template.Child()
-    btn_airing_schedule = Gtk.Template.Child()
     mediatype_box = Gtk.Template.Child()
     header_bar = Gtk.Template.Child()
 
@@ -226,7 +224,6 @@ class TrackmaWindow(Gtk.ApplicationWindow):
             self.add_action(action)
 
         add_action('search', self._on_search)
-        add_action('airing_schedule', self._on_airing_schedule)
         add_action('synchronize', self._on_synchronize)
         add_action('upload', self._on_upload)
         add_action('download', self._on_download)
@@ -315,12 +312,6 @@ class TrackmaWindow(Gtk.ApplicationWindow):
 
     def _on_search_error(self, search_window, error_msg):
         print(error_msg)
-
-    def _on_airing_schedule(self, action, param):
-        win = AiringScheduleWindow(self._engine, transient_for=self)
-        win.connect('destroy', self._on_modal_destroy)
-        win.present()
-        self._modals.append(win)
 
     def _on_synchronize(self, action, param):
         threading.Thread(target=self._synchronization_task,
@@ -767,7 +758,6 @@ class TrackmaWindow(Gtk.ApplicationWindow):
 
     def _set_buttons_sensitive(self, sensitive):
         actions_names = ['search',
-                         'airing_schedule',
                          'synchronize',
                          'upload',
                          'download',

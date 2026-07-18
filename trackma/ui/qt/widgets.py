@@ -19,8 +19,8 @@ import os
 
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtWidgets import (QAbstractItemView, QDoubleSpinBox, QFormLayout, QHBoxLayout, QHeaderView,
-                             QLabel, QListView, QProgressBar, QScrollArea, QSlider, QSplitter, QTableView,
-                             QToolButton, QVBoxLayout, QWidget)
+                             QLabel, QListView, QScrollArea, QSlider, QSplitter, QTableView,
+                             QVBoxLayout, QWidget)
 
 from trackma import utils
 from trackma.ui.qt.delegates import AddListDelegate, ShowsTableDelegate
@@ -312,79 +312,6 @@ class AddTableDetailsView(QSplitter):
 
     def clearSelection(self):
         return self.table.clearSelection()
-
-
-class HoverProgressBar(QWidget):
-    """A progress bar with +/- buttons overlaid on its left/right edges
-    instead of sitting beside it -- Taiga mode's compact episode
-    increment control. The buttons stay real (never hidden -- their
-    keyboard shortcuts would stop firing if they were), just styled
-    transparent until the bar is hovered.
-
-    Exposes the same setFormat/setMaximum/setValue/setEnabled surface
-    as a plain QProgressBar so callers don't need to know which one
-    they have.
-    """
-
-    incremented = QtCore.pyqtSignal()
-    decremented = QtCore.pyqtSignal()
-
-    _BTN_HIDDEN = "QToolButton { border: none; background: transparent; color: transparent; }"
-    _BTN_VISIBLE = "QToolButton { border: none; background: palette(mid); color: palette(text); }"
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setMouseTracking(True)
-
-        self.bar = QProgressBar(self)
-
-        self.dec_btn = QToolButton(self)
-        self.dec_btn.setText('-')
-        self.dec_btn.setAutoRaise(True)
-        self.dec_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        self.dec_btn.setStyleSheet(self._BTN_HIDDEN)
-        self.dec_btn.clicked.connect(self.decremented.emit)
-
-        self.inc_btn = QToolButton(self)
-        self.inc_btn.setText('+')
-        self.inc_btn.setAutoRaise(True)
-        self.inc_btn.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
-        self.inc_btn.setStyleSheet(self._BTN_HIDDEN)
-        self.inc_btn.clicked.connect(self.incremented.emit)
-
-        self.setMinimumHeight(self.bar.sizeHint().height())
-
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self.bar.setGeometry(0, 0, self.width(), self.height())
-        btn_w = max(20, min(28, self.width() // 5))
-        self.dec_btn.setGeometry(0, 0, btn_w, self.height())
-        self.inc_btn.setGeometry(self.width() - btn_w, 0, btn_w, self.height())
-
-    def enterEvent(self, event):
-        self.dec_btn.setStyleSheet(self._BTN_VISIBLE)
-        self.inc_btn.setStyleSheet(self._BTN_VISIBLE)
-        super().enterEvent(event)
-
-    def leaveEvent(self, event):
-        self.dec_btn.setStyleSheet(self._BTN_HIDDEN)
-        self.inc_btn.setStyleSheet(self._BTN_HIDDEN)
-        super().leaveEvent(event)
-
-    def setFormat(self, fmt):
-        self.bar.setFormat(fmt)
-
-    def setMaximum(self, value):
-        self.bar.setMaximum(value)
-
-    def setValue(self, value):
-        self.bar.setValue(value)
-
-    def setEnabled(self, enabled):
-        super().setEnabled(enabled)
-        self.bar.setEnabled(enabled)
-        self.dec_btn.setEnabled(enabled)
-        self.inc_btn.setEnabled(enabled)
 
 
 class ScoreSlider(QWidget):
