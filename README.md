@@ -1,6 +1,8 @@
 Hakubun (博聞)
 ==============
 
+![Hakubun](assets/header.png)
+
 Hakubun aims to be a lightweight and simple but feature-rich program for Unix based systems
 for fetching, updating and using data from personal lists hosted in several media tracking websites.
 
