@@ -50,6 +50,7 @@ class libanilist(lib):
         'can_play': True,
         'can_date': True,
         'date_next_ep': True,
+        'can_reference_mal': True,
         'statuses_start': ['CURRENT', 'REPEATING'],
         'statuses_finish': ['COMPLETED'],
         'statuses_library': ['CURRENT', 'REPEATING', 'PAUSED', 'PLANNING'],
@@ -75,6 +76,7 @@ class libanilist(lib):
         'can_update': True,
         'can_play': False,
         'can_date': True,
+        'can_reference_mal': True,
         'statuses_start': ['CURRENT', 'REPEATING'],
         'statuses_finish': ['COMPLETED'],
         'statuses':  ['CURRENT', 'COMPLETED', 'REPEATING', 'PAUSED', 'DROPPED', 'PLANNING'],
@@ -254,6 +256,7 @@ fragment mediaListEntry on MediaList {
   completedAt { year month day }
   media {
     id
+    idMal
     title { userPreferred romaji english native }
     synonyms
     coverImage { large medium }
@@ -264,6 +267,7 @@ fragment mediaListEntry on MediaList {
     startDate { year month day }
     endDate { year month day }
     siteUrl
+    averageScore
   }
 }'''
         variables = {'id': self.userid, 'listType': self.mediatype.upper()}
@@ -300,6 +304,9 @@ fragment mediaListEntry on MediaList {
                     'aliases': self._get_aliases(media),
                     'type': self._translate_type(media['format']),
                     'status': self._translate_status(media['status']),
+                    'platform_score': (
+                        '%d%%' % media['averageScore'] if media.get('averageScore') else None),
+                    'mal_id': media.get('idMal'),
                     'my_progress': self._c(item['progress']),
                     'my_status': my_status,
                     'my_score': self._c(item['score']),
@@ -319,6 +326,7 @@ fragment mediaListEntry on MediaList {
                         media['nextAiringEpisode']['airingAt'])
                 show.update({k: v for k, v in showdata.items() if v})
                 showlist[showid] = show
+
         return showlist
 
     args_SaveMediaListEntry = {
@@ -393,6 +401,7 @@ fragment mediaListEntry on MediaList {
 
         query += '''
       id
+      idMal
       title { userPreferred romaji english native }
       coverImage { medium large }
       format
@@ -429,6 +438,7 @@ fragment mediaListEntry on MediaList {
         query = '''query ($id: Int!, $type: MediaType) {
   Media(id: $id, type: $type) {
       id
+      idMal
       title { userPreferred romaji english native }
       coverImage { medium large }
       format
@@ -475,6 +485,7 @@ fragment mediaListEntry on MediaList {
 
         info.update({
             'id': showid,
+            'mal_id': item.get('idMal'),
             'title': item['title']['userPreferred'],
             'total': self._c(item[self.total_str]),
             'aliases': self._get_aliases(item),
@@ -493,7 +504,7 @@ fragment mediaListEntry on MediaList {
                 ('Season',          season_and_year),
                 ('Genres',          item.get('genres')),
                 ('Studios',         [s['name'] for s in item['studios']['nodes']]),
-                ('Synopsis',        item.get('description')),
+                ('Synopsis',        utils.clean_synopsis(item.get('description'))),
                 ('Type',            type_),
                 ('Average score',   item.get('averageScore')),
                 ('Mean score',      item.get('meanScore')),

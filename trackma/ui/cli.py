@@ -1103,6 +1103,8 @@ class Trackma_accounts(AccountManager):
 def main():
     # Process args
     parser = argparse.ArgumentParser()
+    parser.add_argument('-v', '--version', action='version',
+                        version='Trackma v%s' % utils.VERSION)
     parser.add_argument('-a', '--account', type=int,
                         help='Use specific account number.')
     parser.add_argument('-d', '--debug', action='store_true',

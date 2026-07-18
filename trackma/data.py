@@ -46,7 +46,8 @@ class Data:
     queue = list()
     config = dict()
     meta = {'lastget': 0, 'lastsend': 0, 'version': '', 'apiversion': '',
-            'altnames': {}, 'library': {}, 'library_cache': {}, }
+            'altnames': {}, 'library': {}, 'library_cache': {},
+            'library_scan_signature': None, }
 
     autosend_timer = None
 
@@ -54,6 +55,7 @@ class Data:
         'show_synced':       None,
         'sync_complete':     None,
         'queue_changed':     None,
+        'list_downloaded':   None,
     }
 
     def __init__(self, messenger, config, account, mediatype):
@@ -75,6 +77,12 @@ class Data:
         # Import the API
         libbase = account['api']
         libname = "lib{0}".format(libbase)
+        # Kitsu can talk to either its legacy REST API or its newer
+        # GraphQL API, chosen by the 'kitsu_api' setting. Both use the
+        # same kitsu.app account/OAuth, so this is transparent to the
+        # account itself.
+        if libbase == 'kitsu' and self.config.get('kitsu_api') == 'graphql':
+            libname = 'libkitsu_graphql'
         try:
             modulename = "trackma.lib.{0}".format(libname)
             __import__(modulename)
@@ -161,7 +169,7 @@ class Data:
             # Auto-retrieve: Redownload list if any autoretrieve condition is met
             if (self.config['autoretrieve'] == 'always' or
                 (self.config['autoretrieve'] == 'days' and
-                 time.time() - self.meta['lastget'] > self.config['autoretrieve_days'] * 84600) or
+                 time.time() - self.meta['lastget'] > self.config['autoretrieve_days'] * 86400) or
                     self.meta.get('version') != self.version):
                 try:
                     # Make sure we process the queue first before overwriting the list
@@ -437,11 +445,39 @@ class Data:
         self.meta['lastsend'] = time.time()
 
     def info_get(self, show):
-        try:
-            showid = show['id']
-            return self.infocache[showid]
-        except KeyError:
-            return self.api.request_info([show])[0]
+        showid = show['id']
+        info = self.infocache.get(showid)
+        # Some backends (e.g. Kitsu GraphQL) cache a partial entry from the
+        # bulk list fetch to keep that request small, deferring expensive
+        # fields like the synopsis. Transparently fetch the full details
+        # the first time such an entry is actually requested; the request
+        # sets _save_info() and stores a non-partial entry, so this only
+        # fires once per show.
+        if info is None or info.get('_details_pending'):
+            info = self.api.request_info([show])[0]
+        return self._sanitized_info(info)
+
+    @staticmethod
+    def _sanitized_info(info):
+        # Defends against entries cached on disk before synopsis
+        # sanitization existed (or by any backend that skips it) --
+        # clean_synopsis is idempotent, so this is a no-op on text
+        # that's already clean.
+        extra = info.get('extra')
+        if not extra:
+            return info
+
+        cleaned = [
+            (key, utils.clean_synopsis(value)
+             if key == 'Synopsis' and isinstance(value, str) else value)
+            for key, value in extra
+        ]
+        if cleaned == extra:
+            return info
+
+        info = dict(info)
+        info['extra'] = cleaned
+        return info
 
     def info_update(self, shows):
         for show in shows:
@@ -478,6 +514,12 @@ class Data:
     def library_cache_save(self, library_cache):
         self.meta['library_cache'] = library_cache
 
+    def library_scan_signature_get(self):
+        return self.meta['library_scan_signature']
+
+    def library_scan_signature_save(self, signature):
+        self.meta['library_scan_signature'] = signature
+
     def get_show_attr(self, show, key):
         return show.get(key)
 
@@ -510,6 +552,12 @@ class Data:
     def _save_cache(self):
         self.msg.debug("Saving cache...")
         utils.save_data(self.showlist, self.cache_file)
+
+    def save_cache(self):
+        """Public hook for the engine to persist the show list after
+        mutating shows outside the queue system (e.g. cached MAL
+        scores, which are display-only and never synced upstream)."""
+        self._save_cache()
 
     def _load_info(self):
         self.msg.debug("Reading info DB...")
@@ -584,6 +632,8 @@ class Data:
         self.meta['version'] = self.version
         self.meta['apiversion'] = self.api_version
         self._save_meta()
+
+        self._emit_signal('list_downloaded')
 
     def _cache_exists(self):
         return os.path.isfile(self.cache_file)

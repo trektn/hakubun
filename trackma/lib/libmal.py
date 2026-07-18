@@ -267,7 +267,7 @@ class libmal(lib):
         self.check_credentials()
         shows = {}
 
-        fields = 'id,alternative_titles,title,start_date,end_date,main_picture,status,' + self.total_str
+        fields = 'id,alternative_titles,title,start_date,end_date,main_picture,status,media_type,mean,' + self.total_str
         listfields = 'score,status,start_date,finish_date,updated_at,' + self.watched_str
         params = {
             'fields': '%s,list_status{%s}' % (fields, listfields),
@@ -293,6 +293,9 @@ class libmal(lib):
                     'image_thumb': item['node'].get('main_picture', {}).get('medium'),
                     'total': item['node'][self.total_str],
                     'status': self._translate_status(item['node']['status']),
+                    'type': self.type_translate.get(item['node'].get('media_type'), utils.Type.UNKNOWN),
+                    'platform_score': (
+                        '%.2f' % item['node']['mean'] if item['node'].get('mean') else None),
                     'start_date': self._str2date(item['node'].get('start_date')),
                     'end_date': self._str2date(item['node'].get('end_date')),
                     'my_progress': item['list_status'][self.watched_str],
@@ -404,7 +407,7 @@ class libmal(lib):
                 ('English',         item['alternative_titles'].get('en')),
                 ('Japanese',        item['alternative_titles'].get('ja')),
                 ('Synonyms',        item['alternative_titles'].get('synonyms')),
-                ('Synopsis',        item.get('synopsis')),
+                ('Synopsis',        utils.clean_synopsis(item.get('synopsis'))),
                 ('Type',            item.get('media_type')),
                 ('Mean score',   item.get('mean')),
                 ('Status',          self._translate_status(item['status'])),

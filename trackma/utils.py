@@ -17,6 +17,7 @@
 import copy
 import datetime
 import difflib
+import html
 import json
 import locale
 import os
@@ -30,7 +31,7 @@ import time
 import uuid
 from enum import Enum, auto
 
-VERSION = '0.10.4'
+VERSION = '0.15'
 
 DATADIR = os.path.dirname(__file__) + '/data'
 
@@ -336,24 +337,24 @@ def copy_file(src, dest):
 
 
 def to_config_path(*paths):
-    if dir_exists(os.path.join(HOME, ".trackma")):
-        return os.path.join(HOME, ".trackma", *paths)
+    if dir_exists(os.path.join(HOME, ".hakubun")):
+        return os.path.join(HOME, ".hakubun", *paths)
 
-    return os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.join(HOME, ".config")), "trackma", *paths)
+    return os.path.join(os.environ.get("XDG_CONFIG_HOME", os.path.join(HOME, ".config")), "hakubun", *paths)
 
 
 def to_data_path(*paths):
-    if dir_exists(os.path.join(HOME, ".trackma")):
-        return os.path.join(HOME, ".trackma", *paths)
+    if dir_exists(os.path.join(HOME, ".hakubun")):
+        return os.path.join(HOME, ".hakubun", *paths)
 
-    return os.path.join(os.environ.get("XDG_DATA_HOME", os.path.join(HOME, ".local", "share")), "trackma", *paths)
+    return os.path.join(os.environ.get("XDG_DATA_HOME", os.path.join(HOME, ".local", "share")), "hakubun", *paths)
 
 
 def to_cache_path(*paths):
-    if dir_exists(os.path.join(HOME, ".trackma")):
-        return os.path.join(HOME, ".trackma", "cache", *paths)
+    if dir_exists(os.path.join(HOME, ".hakubun")):
+        return os.path.join(HOME, ".hakubun", "cache", *paths)
 
-    return os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.join(HOME, ".cache")), "trackma", *paths)
+    return os.path.join(os.environ.get("XDG_CACHE_HOME", os.path.join(HOME, ".cache")), "hakubun", *paths)
 
 
 def change_permissions(filename, mode):
@@ -520,13 +521,23 @@ def show():
         'my_finish_date': None,
         'type':         0,
         'status':       0,
+        'platform_score': None,
+        # Cross-referenced MyAnimeList id/community score, for accounts on
+        # a different backend (e.g. AniList) -- fetched separately since
+        # it isn't part of that backend's own list response. See
+        # Engine._fetch_mal_scores_task.
+        'mal_id':       None,
+        'mal_score':    None,
         'total':        0,
         'start_date':   None,
         'end_date':     None,
         'image':        '',
         'image_thumb':  '',
         'queued':       False,
-        'my_last-update': None
+        # Was 'my_last-update' (dash typo) for a long time, so shows
+        # where the API didn't set this explicitly were missing the
+        # underscore key entirely, causing KeyErrors wherever it's read.
+        'my_last_update': None
     }
 
 
@@ -572,6 +583,12 @@ config_defaults = {
     'searchdir': ['~/Videos'],
     'tracker_enabled': True,
     'tracker_update_wait_s': 120,
+    # When False, the MPRIS tracker updates at 80% of the episode's
+    # actual duration (from the player's reported position/length)
+    # instead of the fixed wait above -- matches the Plex/Kodi trackers'
+    # own obey_update_wait_s toggles, which do the same thing for their
+    # own duration sources.
+    'mpris_obey_update_wait_s': True,
     'tracker_update_close': False,
     'tracker_update_prompt': False,
     'tracker_not_found_prompt': False,
@@ -587,6 +604,8 @@ config_defaults = {
     'library_autoscan': True,
     'library_full_path': False,
     'scan_whole_list': False,
+    'add_dialog_default_status': 'current',
+    'sync_on_settings_apply': False,
     'debug_disable_lock': True,
     'auto_status_change': True,
     'auto_status_change_if_scored': True,
@@ -612,6 +631,15 @@ config_defaults = {
     'redirections_time': 1,
     'use_hooks': True,
     'title_parser': 'aie',
+    # Automatically cross-reference MyAnimeList's community score after
+    # every sync, using a MAL account added in trackma (see
+    # Engine.fetch_mal_scores). Off by default since it needs a MAL
+    # account configured to do anything.
+    'auto_add_mal_scores': False,
+    # Which Kitsu backend to use: 'legacy' (REST/JSON:API, libkitsu) or
+    # 'graphql' (libkitsu_graphql). Defaults to legacy so existing Kitsu
+    # accounts keep working exactly as before unless explicitly switched.
+    'kitsu_api': 'legacy',
 }
 
 userconfig_defaults = {
@@ -732,12 +760,73 @@ qt_defaults = {
     },
     'sort_index': 1,
     'sort_order': 0,
+    'taiga_mode': False,
 }
 
 qt_per_api_defaults = {
     'visible_columns': ['Title', 'Progress', 'Score', 'Percent'],
     'columns_state': None,
 }
+
+_SYNOPSIS_PARA_RE = re.compile(r'</p>\s*<p[^>]*>', re.IGNORECASE)
+_SYNOPSIS_LINE_RE = re.compile(r'<br\s*/?>', re.IGNORECASE)
+# Only matches things that actually look like HTML tags (start with a
+# letter, optionally preceded by a slash) -- a plain "<" or ">" used as a
+# comparison operator in a synopsis (e.g. "power < 9000") isn't a tag and
+# shouldn't be eaten along with whatever follows it on the line.
+_SYNOPSIS_TAG_RE = re.compile(r'</?[a-zA-Z][^>]*>')
+_SYNOPSIS_BLANK_LINES_RE = re.compile(r'\n{3,}')
+
+
+def clean_synopsis(text):
+    """Normalizes an API-supplied synopsis/description into plain text
+    with real newlines for paragraph breaks.
+
+    Some backends (Kitsu, AniList) embed literal HTML (``<br>``, ``<p>``)
+    in this field instead of using real line breaks. Left as-is, that
+    markup either gets escaped and shown as literal text, or silently
+    stripped/collapsed by the UI toolkit's markup renderer -- neither of
+    which is what the API meant. Callers are expected to still escape the
+    returned text for whatever markup dialect they render it in.
+    """
+    if not text:
+        return text
+    text = _SYNOPSIS_PARA_RE.sub('\n\n', text)
+    text = _SYNOPSIS_LINE_RE.sub('\n', text)
+    text = _SYNOPSIS_TAG_RE.sub('', text)
+    text = html.unescape(text)
+    text = _SYNOPSIS_BLANK_LINES_RE.sub('\n\n', text)
+    return text.strip()
+
+
+def format_relative_airtime(dt, now=None) -> str:
+    """Human-relative description of an airing time -- days out by
+    default, switching to hours and then minutes as it gets closer, e.g.
+    "In 3 days" -> "In 5 hours" -> "In 12 minutes". Callers should show
+    the absolute time somewhere too (e.g. a tooltip), since the relative
+    form alone loses precision.
+    """
+    if now is None:
+        now = datetime.datetime.now(datetime.timezone.utc)
+    seconds = (dt - now).total_seconds()
+
+    if seconds <= 0:
+        return 'Airing now' if seconds > -1800 else 'Aired'
+
+    minutes = seconds / 60
+    if minutes < 60:
+        n = max(1, round(minutes))
+        return 'In %d minute%s' % (n, '' if n == 1 else 's')
+
+    hours = minutes / 60
+    if hours < 24:
+        n = max(1, round(hours))
+        return 'In %d hour%s' % (n, '' if n == 1 else 's')
+
+    days = hours / 24
+    n = max(1, round(days))
+    return 'In %d day%s' % (n, '' if n == 1 else 's')
+
 
 def format_local_time(
     dt,
@@ -750,3 +839,71 @@ def format_local_time(
         return dt.astimezone().strftime(locale.nl_langinfo(locale.D_T_FMT))
     except ValueError:
         return error_message
+
+
+def decimal_places(step) -> int:
+    """Number of decimal places represented in a float step value (e.g. 0.25 -> 2)."""
+    if isinstance(step, float):
+        fraction = str(step).split('.')[1]
+        if fraction != '0':
+            return len(fraction)
+    return 0
+
+
+def score_display_factor(mediainfo) -> float:
+    """
+    Multiplier used to present a friendlier score to the user than an
+    API's raw scale.
+
+    Only fine-grained small-scale systems (Kitsu: 0-5 in 0.25 increments)
+    are doubled to a less awkward 0-10 in 0.5 increments. Coarser
+    small-scale systems that step by whole units (e.g. AniList's 5-star
+    or 3-point smiley scales) are left as-is, since showing "2, 4, 6, 8,
+    10" for a 5-star rating would misrepresent it.
+    """
+    if mediainfo['score_max'] <= 5 and mediainfo['score_step'] < 1:
+        return 2
+    return 1
+
+
+def score_display_range(mediainfo):
+    """Returns (display_max, display_step, decimals) for the score UI."""
+    factor = score_display_factor(mediainfo)
+    display_max = mediainfo['score_max'] * factor
+    display_step = mediainfo['score_step'] * factor
+
+    return display_max, display_step, decimal_places(display_step)
+
+
+def score_to_display(raw_score, mediainfo):
+    """Converts a raw API score into its friendlier display value."""
+    return raw_score * score_display_factor(mediainfo)
+
+
+def score_to_raw(display_score, mediainfo):
+    """Converts a display score back into the API's raw scale."""
+    return display_score / score_display_factor(mediainfo)
+
+
+def date_to_season(dt) -> str:
+    """Formats a date as an anime-style 'Season Year' label, e.g. 'Winter 2009'."""
+    if dt is None:
+        return '?'
+    seasons = (Season.WINTER, Season.SPRING, Season.SUMMER, Season.FALL)
+    season = seasons[(dt.month - 1) // 3]
+    return f'{season!s} {dt.year}'
+
+
+def get_season_label(show) -> str:
+    """
+    Returns a 'Season Year' label for a show (e.g. 'Winter 2009').
+
+    Prefers an API-native season/year when the backend supplies one (e.g.
+    AniList's season/seasonYear, surfaced as a 'Season' entry in
+    show['extra']) since that's authoritative, falling back to deriving
+    one from start_date for backends that don't (MAL, Kitsu).
+    """
+    for key, value in show.get('extra') or []:
+        if key == 'Season' and value:
+            return value
+    return date_to_season(show.get('start_date'))
