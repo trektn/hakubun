@@ -4,8 +4,12 @@ Hakubun (博聞)
 Hakubun aims to be a lightweight and simple but feature-rich program for Unix based systems
 for fetching, updating and using data from personal lists hosted in several media tracking websites.
 
+The name Hakubun comes from a Japanese 4-character idiom 博聞強記, meaning "being widely read and having a highly retentive memory"
+
 Hakubun is an independent fork of [Trackma](https://github.com/z411/trackma), extended with
 additional features. See [Relationship to upstream](#relationship-to-upstream) below.
+
+See [Hakubun+](https://github.com/trektn/hakubun-plus) for even more features, there's another repo because I thought Hakubun was already out of scope for an anime tracker.
 
 Features
 --------
