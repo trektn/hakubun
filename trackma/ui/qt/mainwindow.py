@@ -20,7 +20,7 @@ import os
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtGui import QAction, QActionGroup
 from PyQt6.QtWidgets import (QAbstractItemView, QApplication, QCheckBox, QComboBox,
-                             QFormLayout, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit,
+                             QFormLayout, QGroupBox, QHBoxLayout, QHeaderView, QInputDialog, QLabel, QLineEdit,
                              QMainWindow, QMenu, QMessageBox, QProgressBar, QPushButton, QSpinBox, QStyle,
                              QStyleOptionButton, QSystemTrayIcon, QTabBar, QToolButton, QVBoxLayout, QWidget)
 
@@ -32,7 +32,7 @@ from trackma.ui.qt.add import AddDialog
 from trackma.ui.qt.details import DetailsDialog
 from trackma.ui.qt.settings import SettingsDialog
 from trackma.ui.qt.util import FilterBar, getIcon
-from trackma.ui.qt.widgets import ScoreSlider, ShowsTableView
+from trackma.ui.qt.widgets import PlaybackBar, ScoreSlider, ShowsTableView
 from trackma.ui.qt.workers import EngineWorker, ImageWorker
 
 class MainWindow(QMainWindow):
@@ -430,6 +430,45 @@ class MainWindow(QMainWindow):
         self.show_status.setToolTip('Change your watching status of this show')
         self.show_status.currentIndexChanged.connect(self.s_set_status)
 
+        # Hidden entirely until something's actually playing -- see
+        # _update_now_playing_sidebar().
+        self.now_playing_group = QGroupBox('Now Playing')
+        self.now_playing_group.setFlat(True)
+        self.now_playing_status = QLabel('Nothing playing')
+        self.now_playing_status.setWordWrap(True)
+        now_playing_status_font = QtGui.QFont()
+        now_playing_status_font.setBold(True)
+        self.now_playing_status.setFont(now_playing_status_font)
+
+        self.now_playing_bar = PlaybackBar(progress_color=self.config['colors']['progress_fg'])
+
+        now_playing_btn_row = QHBoxLayout()
+        self.now_playing_last_btn = QPushButton('Previous Episode')
+        self.now_playing_last_btn.clicked.connect(
+            lambda: self._now_playing_play(-1))
+        self.now_playing_next_btn = QPushButton('Next Episode')
+        self.now_playing_next_btn.clicked.connect(
+            lambda: self._now_playing_play(1))
+        now_playing_btn_row.addWidget(self.now_playing_last_btn)
+        now_playing_btn_row.addWidget(self.now_playing_next_btn)
+
+        self.now_playing_position = QLabel('')
+        self.now_playing_position.setWordWrap(True)
+        # A theme's own de-emphasized-text role, not a fixed color --
+        # stays legible whether the theme is light or dark.
+        self.now_playing_position.setStyleSheet(
+            'color: palette(placeholder-text);')
+
+        now_playing_layout = QVBoxLayout()
+        now_playing_layout.addWidget(self.now_playing_status)
+        now_playing_layout.addWidget(self.now_playing_bar)
+        now_playing_layout.addLayout(now_playing_btn_row)
+        now_playing_layout.addWidget(self.now_playing_position)
+        self.now_playing_group.setLayout(now_playing_layout)
+        self.now_playing_group.hide()
+        self._now_playing_show = None
+        self._now_playing_episode = None
+
         left_box.addRow(self.show_image)
 
         small_btns_hbox.addWidget(self.show_dec_btn)
@@ -444,6 +483,7 @@ class MainWindow(QMainWindow):
         left_box.addRow(self.show_progress, self.show_progress_btn)
         left_box.addRow(show_score_label)
         left_box.addRow(self.show_score)
+        left_box.addRow(self.now_playing_group)
         left_box.addRow(self.show_status)
         left_box.addRow(self.show_tags_btn)
 
@@ -1406,6 +1446,48 @@ class MainWindow(QMainWindow):
 
     def ws_tracker_state(self, status):
         self._update_tracker_info(status)
+        self._update_now_playing_sidebar(status)
+
+    def _update_now_playing_sidebar(self, status):
+        state = status['state']
+
+        # IGNORED means the tracker recognized the show/episode just fine
+        # but isn't going to update progress for it (e.g. replaying an
+        # already-watched episode from the player's own playlist) -- it
+        # should still show up here, just labeled differently, rather
+        # than the section disappearing as if nothing were playing.
+        if state in (utils.Tracker.PLAYING, utils.Tracker.IGNORED) and status.get('show'):
+            show, episode = status['show']
+            self._now_playing_show = show
+            self._now_playing_episode = episode
+            if state == utils.Tracker.IGNORED:
+                self.now_playing_status.setText(
+                    '%s -- Episode %d (already watched)' % (show['title'], episode))
+            else:
+                self.now_playing_status.setText(
+                    '%s -- Episode %d' % (show['title'], episode))
+            self.now_playing_bar.update_status(status)
+            self.now_playing_position.setText(
+                utils.format_playback_position(
+                    status.get('viewOffset'), status.get('length'),
+                    include_percent=False))
+            self.now_playing_last_btn.setEnabled(episode > 1)
+            self.now_playing_group.show()
+        else:
+            self._now_playing_show = None
+            self._now_playing_episode = None
+            self.now_playing_group.hide()
+
+    def _now_playing_play(self, delta):
+        if self._now_playing_show and self._now_playing_episode:
+            episode = self._now_playing_episode + delta
+            if episode >= 1:
+                self.s_play_show_episode(self._now_playing_show['id'], episode)
+
+    def s_play_show_episode(self, showid, episode):
+        show = self.worker.engine.get_show_info(showid)
+        self._busy(True)
+        self.worker_call('play_episode', self.r_play_episode, show, episode)
 
     def ws_undo_stack_changed(self):
         self.action_undo.setEnabled(self.worker.engine.can_undo())
