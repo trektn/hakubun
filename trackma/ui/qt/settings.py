@@ -474,9 +474,16 @@ class SettingsDialog(QDialog):
         for (n, label) in filter_bar_positions:
             self.filter_bar_position.addItem(label, n)
         self.inline_edit = QCheckBox('Enable in-line editing')
+        self.filter_global = QCheckBox('Switch to the All category when filtering')
+        self.filter_global.setToolTip(
+            "When typing in the filter bar while on a specific status "
+            "tab (e.g. Watching), automatically switch to the All tab so "
+            "the filter searches your whole list instead of just that "
+            "status.")
         g_lists_layout = QFormLayout()
         g_lists_layout.addRow('Filter bar position:', self.filter_bar_position)
         g_lists_layout.addRow(self.inline_edit)
+        g_lists_layout.addRow(self.filter_global)
         g_lists.setLayout(g_lists_layout)
 
         # UI layout
@@ -691,6 +698,7 @@ class SettingsDialog(QDialog):
         self.filter_bar_position.setCurrentIndex(
             self.filter_bar_position.findData(self.config['filter_bar_position']))
         self.inline_edit.setChecked(self.config['inline_edit'])
+        self.filter_global.setChecked(self.config['filter_global'])
 
         self.ep_bar_style.setCurrentIndex(
             self.ep_bar_style.findData(self.config['episodebar_style']))
@@ -815,6 +823,7 @@ class SettingsDialog(QDialog):
         self.config['filter_bar_position'] = self.filter_bar_position.itemData(
             self.filter_bar_position.currentIndex())
         self.config['inline_edit'] = self.inline_edit.isChecked()
+        self.config['filter_global'] = self.filter_global.isChecked()
 
         self.config['episodebar_style'] = self.ep_bar_style.itemData(
             self.ep_bar_style.currentIndex())
