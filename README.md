@@ -205,4 +205,4 @@ Authors
 -------
 
 Hakubun is a fork of Trackma, originally written by z411 <z411@omaera.org>. For other upstream
-contributors see the AUTHORS file. GTK icon designed by shuuichi.
+contributors see the AUTHORS file.
