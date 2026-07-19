@@ -8,6 +8,7 @@ Unreleased
 - Improvement: Scores use appropriate decimal precision; Kitsu's quarter-step 0-5 scale is displayed as a 0-10 half-step scale.
 - Improvement: Full library scans are skipped when the watched directories have not changed; automatic retrieval now uses a correct 24-hour day.
 - Bugfix: Corrected the default `my_last_update` key and refreshed current platform-score/type data from AniList, Kitsu, and MAL.
+- New feature: (Qt) A "Now Playing" sidebar section shows the currently tracked show/episode, playback progress, and Previous/Next Episode buttons whenever the tracker detects something playing.
 
 v0.10.3
 - Bugfix: (Qt) Fixed filter's Invert checkbox
