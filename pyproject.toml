@@ -70,6 +70,7 @@ hakubun-qt = "trackma.ui.qt:main"
 
 [tool.uv.build-backend]
 module-root = ""
+module-name = "trackma"
 
 [build-system]
 requires = ["uv_build>=0.8.13"]
