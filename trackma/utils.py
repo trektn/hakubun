@@ -829,6 +829,37 @@ def format_local_time(
         return error_message
 
 
+def format_clock(milliseconds) -> str:
+    """12345678ms -> '3:25:45'; drops the hours field when there are none."""
+    total_seconds = int(milliseconds / 1000)
+    minutes, seconds = divmod(total_seconds, 60)
+    hours, minutes = divmod(minutes, 60)
+    if hours:
+        return '%d:%02d:%02d' % (hours, minutes, seconds)
+    return '%d:%02d' % (minutes, seconds)
+
+
+def format_playback_position(view_offset_ms, length_ms=None, include_percent=True) -> str:
+    """'12:34 / 24:00 (52%)' when the tracker knows the episode's
+    duration (currently MPRIS only), '12:34' when it only knows elapsed
+    time, '' when it knows neither (nothing playing).
+
+    `include_percent` should be False when the caller already shows the
+    percentage next to this (e.g. Qt's PlaybackBar has its own percent
+    label beside the bar) -- otherwise it ends up printed twice right
+    next to each other, e.g. "52% 12:34 / 24:00 (52%)".
+    """
+    if view_offset_ms is None:
+        return ''
+    position = format_clock(view_offset_ms)
+    if not length_ms:
+        return position
+    if not include_percent:
+        return '%s / %s' % (position, format_clock(length_ms))
+    percent = min(100, round(view_offset_ms / length_ms * 100))
+    return '%s / %s (%d%%)' % (position, format_clock(length_ms), percent)
+
+
 def decimal_places(step) -> int:
     """Number of decimal places represented in a float step value (e.g. 0.25 -> 2)."""
     if isinstance(step, float):

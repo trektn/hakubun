@@ -63,6 +63,7 @@ class TrackerBase(object):
         self.parser_class = get_parser_class(self.msg, self.config['title_parser'])
 
         self.view_offset = None
+        self.length = None
 
         tracker_args = (config, watch_dirs)
         tracker_t = threading.Thread(target=self.observe, args=tracker_args)
@@ -96,6 +97,7 @@ class TrackerBase(object):
             'state': self.last_state,
             'timer': self.timer,
             'viewOffset': self.view_offset,
+            'length': self.length,
             'paused': bool(self.timer_paused),
             'show': self.last_show_tuple,
             'filename': self.last_filename,
