@@ -50,7 +50,6 @@ class libanilist(lib):
         'can_play': True,
         'can_date': True,
         'date_next_ep': True,
-        'can_reference_mal': True,
         'statuses_start': ['CURRENT', 'REPEATING'],
         'statuses_finish': ['COMPLETED'],
         'statuses_library': ['CURRENT', 'REPEATING', 'PAUSED', 'PLANNING'],
@@ -76,7 +75,6 @@ class libanilist(lib):
         'can_update': True,
         'can_play': False,
         'can_date': True,
-        'can_reference_mal': True,
         'statuses_start': ['CURRENT', 'REPEATING'],
         'statuses_finish': ['COMPLETED'],
         'statuses':  ['CURRENT', 'COMPLETED', 'REPEATING', 'PAUSED', 'DROPPED', 'PLANNING'],
@@ -306,7 +304,6 @@ fragment mediaListEntry on MediaList {
                     'status': self._translate_status(media['status']),
                     'platform_score': (
                         '%d%%' % media['averageScore'] if media.get('averageScore') else None),
-                    'mal_id': media.get('idMal'),
                     'my_progress': self._c(item['progress']),
                     'my_status': my_status,
                     'my_score': self._c(item['score']),
@@ -485,7 +482,6 @@ fragment mediaListEntry on MediaList {
 
         info.update({
             'id': showid,
-            'mal_id': item.get('idMal'),
             'title': item['title']['userPreferred'],
             'total': self._c(item[self.total_str]),
             'aliases': self._get_aliases(item),

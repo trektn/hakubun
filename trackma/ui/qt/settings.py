@@ -445,25 +445,10 @@ class SettingsDialog(QDialog):
         g_lists_layout.addRow(self.inline_edit)
         g_lists.setLayout(g_lists_layout)
 
-        # Group: MAL Scores
-        g_mal_scores = QGroupBox('MAL Scores')
-        g_mal_scores.setFlat(True)
-        self.add_mal_scores = QCheckBox(
-            'Add MAL Scores (must be signed into MAL)')
-        self.add_mal_scores.setToolTip(
-            "Automatically cross-references MyAnimeList's community score "
-            "for shows on your list after every sync, using a MyAnimeList "
-            "account added in trackma. Not needed if this account already "
-            "is MyAnimeList.")
-        g_mal_scores_layout = QVBoxLayout()
-        g_mal_scores_layout.addWidget(self.add_mal_scores)
-        g_mal_scores.setLayout(g_mal_scores_layout)
-
         # UI layout
         page_ui_layout.addWidget(g_icon)
         page_ui_layout.addWidget(g_window)
         page_ui_layout.addWidget(g_lists)
-        page_ui_layout.addWidget(g_mal_scores)
         page_ui.setLayout(page_ui_layout)
 
         # Theming tab
@@ -652,7 +637,6 @@ class SettingsDialog(QDialog):
         self.auto_status_change_if_scored.setChecked(
             engine.get_config('auto_status_change_if_scored'))
         self.auto_date_change.setChecked(engine.get_config('auto_date_change'))
-        self.add_mal_scores.setChecked(engine.get_config('auto_add_mal_scores'))
 
         self.add_dialog_default_status.setCurrentIndex(
             max(0, self.add_dialog_default_status.findData(
@@ -777,8 +761,6 @@ class SettingsDialog(QDialog):
                           self.auto_status_change_if_scored.isChecked())
         engine.set_config('auto_date_change',
                           self.auto_date_change.isChecked())
-        engine.set_config('auto_add_mal_scores',
-                          self.add_mal_scores.isChecked())
 
         engine.set_config('add_dialog_default_status',
                           self.add_dialog_default_status.itemData(

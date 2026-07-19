@@ -28,12 +28,11 @@ class ShowListModel(QtCore.QAbstractTableModel):
     COL_SEASON = 13
     COL_TYPE = 14
     COL_PLATFORM_SCORE = 15
-    COL_MAL_SCORE = 16
 
     columns = ['ID', 'Title', 'Progress', 'Score',
                'Percent', 'Next Episode', 'Start date', 'End date',
                'My start', 'My finish', 'Tags', 'Status', 'Last updated', 'Season',
-               'Type', 'Platform Score', 'MAL Score']
+               'Type', 'Platform Score']
 
     editable_columns = [COL_MY_PROGRESS, COL_MY_SCORE]
 
@@ -226,8 +225,6 @@ class ShowListModel(QtCore.QAbstractTableModel):
                 return str(show['type'])
             elif column == ShowListModel.COL_PLATFORM_SCORE:
                 return show.get('platform_score') or '-'
-            elif column == ShowListModel.COL_MAL_SCORE:
-                return show.get('mal_score') or '-'
         elif role == QtCore.Qt.ItemDataRole.BackgroundRole:
             return self.colors.get(row)
         elif role == QtCore.Qt.ItemDataRole.DecorationRole:

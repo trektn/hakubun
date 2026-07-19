@@ -147,7 +147,6 @@ class EngineWorker(QtCore.QThread):
         self.engine.connect_signal('episode_changed', self._changed_show)
         self.engine.connect_signal('score_changed', self._changed_show)
         self.engine.connect_signal('tags_changed', self._changed_show)
-        self.engine.connect_signal('mal_score_changed', self._changed_show)
         self.engine.connect_signal('status_changed', self._changed_show_status)
         self.engine.connect_signal('playing', self._playing_show)
         self.engine.connect_signal('show_added', self._changed_list)

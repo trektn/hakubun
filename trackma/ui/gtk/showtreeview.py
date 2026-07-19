@@ -46,7 +46,6 @@ class ShowListStore(Gtk.ListStore):
         ('season', str),
         ('type', str),
         ('platform-score', str),
-        ('mal-score', str),
     )
 
     def __init__(self, decimals=0, factor=1, colors=dict()):
@@ -142,7 +141,6 @@ class ShowListStore(Gtk.ListStore):
                utils.get_season_label(show),
                str(show['type']),
                show.get('platform_score') or '-',
-               show.get('mal_score') or '-',
                ]
         super().append(row)
 
@@ -178,7 +176,6 @@ class ShowListStore(Gtk.ListStore):
             row[19] = utils.get_season_label(show)
             row[20] = str(show['type'])
             row[21] = show.get('platform_score') or '-'
-            row[22] = show.get('mal_score') or '-'
         return
 
         # print("Warning: Show ID not found in ShowView (%d)" % show['id'])
@@ -284,7 +281,6 @@ class ShowTreeView(Gtk.TreeView):
             ('Season', 19),
             ('Type', 20),
             ('Platform Score', 21),
-            ('MAL Score', 22),
         )
 
         for (name, sort) in self.available_columns:
@@ -374,9 +370,6 @@ class ShowTreeView(Gtk.TreeView):
         renderer = Gtk.CellRendererText()
         self.cols['Platform Score'].pack_start(renderer, False)
         self.cols['Platform Score'].add_attribute(renderer, 'text', 21)
-        renderer = Gtk.CellRendererText()
-        self.cols['MAL Score'].pack_start(renderer, False)
-        self.cols['MAL Score'].add_attribute(renderer, 'text', 22)
 
     def _on_drag_data_get(self, widget, drag_context, data, info, time):
         model, treeiter = self.get_selection().get_selected()

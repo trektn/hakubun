@@ -143,8 +143,6 @@ class MainView(Gtk.Box):
         self._engine.connect_signal(
             'score_changed', self._on_changed_show_idle)
         self._engine.connect_signal(
-            'mal_score_changed', self._on_changed_show_idle)
-        self._engine.connect_signal(
             'status_changed', self._on_changed_show_status_idle)
         self._engine.connect_signal('playing', self._on_playing_show_idle)
         self._engine.connect_signal(

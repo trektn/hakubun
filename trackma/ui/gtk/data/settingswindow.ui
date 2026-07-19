@@ -1977,21 +1977,6 @@
                 <property name="position">2</property>
               </packing>
             </child>
-            <child>
-              <object class="GtkCheckButton" id="checkbox_add_mal_scores">
-                <property name="label" translatable="yes">Add MAL Scores (must be signed into MAL)</property>
-                <property name="visible">True</property>
-                <property name="can_focus">True</property>
-                <property name="receives_default">False</property>
-                <property name="draw_indicator">True</property>
-                <property name="tooltip_text" translatable="yes">Automatically cross-references MyAnimeList's community score for shows on your list after every sync, using a MyAnimeList account added in trackma. Not needed if this account already is MyAnimeList.</property>
-              </object>
-              <packing>
-                <property name="expand">False</property>
-                <property name="fill">True</property>
-                <property name="position">3</property>
-              </packing>
-            </child>
           </object>
           <packing>
             <property name="position">2</property>

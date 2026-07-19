@@ -1,8 +1,7 @@
 Unreleased
 - New feature: Optional Kitsu GraphQL backend, selectable in the interface settings. Its library request can retrieve up to 2,000 entries at once, batches detail lookups, and omits synopses from list downloads to reduce transfer time.
-- New feature: Cross-reference MyAnimeList community scores for AniList and Kitsu entries, manually or automatically after sync when a MAL account is configured.
 - New feature: Undo and redo for progress, score, status, and tag changes in the GTK and Qt interfaces.
-- New feature: GTK and Qt now show Season, Type, Platform Score, and MAL Score columns; search results identify shows already in the user's list.
+- New feature: GTK and Qt now show Season, Type, and Platform Score columns; search results identify shows already in the user's list.
 - New feature: GTK list filtering, drag-and-drop moves between status tabs, status-selection confirmation when adding a show, and Ctrl+Z/Ctrl+Shift+Z (or Ctrl+Y) undo/redo shortcuts.
 - New feature: Qt toolbar actions, a Move to status menu, improved show-detail layout, and a combined exact score slider/spin control.
 - Improvement: Kitsu's REST list download writes its information cache once per download rather than once per page, while retaining sequential page loading for correctness.

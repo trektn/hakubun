@@ -110,7 +110,6 @@ class SettingsWindow(Gtk.Window):
     checkbox_tray_api_icon = Gtk.Template.Child()
     checkbox_remember_geometry = Gtk.Template.Child()
     checkbox_classic_progress = Gtk.Template.Child()
-    checkbox_add_mal_scores = Gtk.Template.Child()
 
     colorbutton_rows_playing = Gtk.Template.Child()
     colorbutton_rows_queued = Gtk.Template.Child()
@@ -252,8 +251,6 @@ class SettingsWindow(Gtk.Window):
             self.engine.get_config('auto_status_change_if_scored'))
         self.checkbox_auto_date_change.set_active(
             self.engine.get_config('auto_date_change'))
-        self.checkbox_add_mal_scores.set_active(
-            self.engine.get_config('auto_add_mal_scores'))
 
         self.combo_add_dialog_default_status.set_active_id(
             self.engine.get_config('add_dialog_default_status'))
@@ -476,8 +473,6 @@ class SettingsWindow(Gtk.Window):
                                self.checkbox_auto_status_change_if_scored.get_active())
         self.engine.set_config(
             'auto_date_change', self.checkbox_auto_date_change.get_active())
-        self.engine.set_config(
-            'auto_add_mal_scores', self.checkbox_add_mal_scores.get_active())
         self.engine.set_config(
             'add_dialog_default_status', self.combo_add_dialog_default_status.get_active_id())
         self.engine.set_config(

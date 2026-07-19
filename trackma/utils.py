@@ -522,12 +522,6 @@ def show():
         'type':         0,
         'status':       0,
         'platform_score': None,
-        # Cross-referenced MyAnimeList id/community score, for accounts on
-        # a different backend (e.g. AniList) -- fetched separately since
-        # it isn't part of that backend's own list response. See
-        # Engine._fetch_mal_scores_task.
-        'mal_id':       None,
-        'mal_score':    None,
         'total':        0,
         'start_date':   None,
         'end_date':     None,
@@ -631,11 +625,6 @@ config_defaults = {
     'redirections_time': 1,
     'use_hooks': True,
     'title_parser': 'aie',
-    # Automatically cross-reference MyAnimeList's community score after
-    # every sync, using a MAL account added in trackma (see
-    # Engine.fetch_mal_scores). Off by default since it needs a MAL
-    # account configured to do anything.
-    'auto_add_mal_scores': False,
     # Which Kitsu backend to use: 'legacy' (REST/JSON:API, libkitsu) or
     # 'graphql' (libkitsu_graphql). Defaults to legacy so existing Kitsu
     # accounts keep working exactly as before unless explicitly switched.

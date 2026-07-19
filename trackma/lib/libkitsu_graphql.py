@@ -88,7 +88,6 @@ class libkitsu_graphql(lib):
         'can_status': True,
         'can_update': True,
         'can_play': True,
-        'can_reference_mal': True,
         'statuses_start': ['current'],
         'statuses_finish': ['completed'],
         'statuses_library': ['current', 'on_hold', 'planned'],
@@ -105,7 +104,6 @@ class libkitsu_graphql(lib):
         'can_status': True,
         'can_update': True,
         'can_play': False,
-        'can_reference_mal': True,
         'statuses_start': ['current'],
         'statuses_finish': ['completed'],
         'statuses': default_statuses,
@@ -149,9 +147,6 @@ class libkitsu_graphql(lib):
         'TBA': utils.Status.NOTYET,
     }
 
-    # externalSite value on a media's mappings that points at MyAnimeList.
-    _mal_sites = ('MYANIMELIST_ANIME', 'MYANIMELIST_MANGA')
-
     # Fields needed to render and merge a library entry.  Keep this list
     # intentionally small: ``library.all`` returns it for every entry and
     # is paginated at 100 entries by Kitsu.  In particular, a synopsis is
@@ -168,7 +163,6 @@ class libkitsu_graphql(lib):
       tba
       titles { canonical preferred romanized }
       posterImage { views { name url } }
-      mappings(first: 20) { nodes { externalSite externalId } }
     '''
 
     _MEDIA_DETAIL_FIELDS = '''
@@ -558,9 +552,6 @@ class libkitsu_graphql(lib):
         show['status'] = info['status']
         show['type'] = info['type']
         show['platform_score'] = info['platform_score']
-        # Carry the cross-referenced MAL id through so the engine's MAL
-        # score feature works for Kitsu accounts too.
-        show['mal_id'] = info.get('mal_id')
 
     # -- Parsing helpers --------------------------------------------------
 
@@ -613,7 +604,6 @@ class libkitsu_graphql(lib):
                 media.get('status'), utils.Status.UNKNOWN),
             'platform_score': (
                 '%.0f%%' % float(average) if average else None),
-            'mal_id':      self._mal_id_from_mappings(media.get('mappings')),
             'url': "https://kitsu.app/{}/{}".format(
                 self.mediatype, media.get('slug')),
             'aliases':     aliases,
@@ -644,17 +634,6 @@ class libkitsu_graphql(lib):
             info['_details_pending'] = True
 
         return info
-
-    def _mal_id_from_mappings(self, mappings):
-        if not mappings:
-            return None
-        for node in mappings.get('nodes', []):
-            if node.get('externalSite') in self._mal_sites:
-                try:
-                    return int(node['externalId'])
-                except (ValueError, TypeError):
-                    return None
-        return None
 
     def _image_by_names(self, poster_image, names):
         """Picks the first available poster image URL by view name, in

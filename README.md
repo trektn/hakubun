@@ -25,9 +25,8 @@ Features
 - Highly scalable, easy to code new interfaces and support for other sites
 - Secure, uses HTTPS wherever possible
 - Optional Kitsu GraphQL backend for faster, batched list downloads
-- Cross-reference MyAnimeList community scores for AniList and Kitsu entries
 - Undo and redo for progress, score, status, and tag changes (GTK and Qt)
-- GTK list filtering, drag-and-drop status moves, and additional list columns (Season, Type, Platform Score, MAL Score)
+- GTK list filtering, drag-and-drop status moves, and additional list columns (Season, Type, Platform Score)
 - Qt toolbar actions, "Move to status" menu, and improved show-detail layout
 
 Which tracker should I use?
