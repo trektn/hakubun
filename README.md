@@ -156,6 +156,8 @@ directory where you store your video files and other settings.
 
 Alternatively, the GTK and Qt interfaces provide a visual Settings panel.
 
+If you are migrating from Trackma, you can transfer all your settings in `~/.config/trackma/` to `~/.config/hakubun/` and this usually shouldn't be a problem. However I recommend only transferring your account logins in `~/.config/trackma/accounts.dict`
+
 Development
 -----------
 
