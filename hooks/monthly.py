@@ -8,7 +8,7 @@ import json
 import urllib.parse
 import urllib.request
 
-import trackma.utils as utils
+import hakubun.utils as utils
 
 ACCESS_TOKEN = ""
 

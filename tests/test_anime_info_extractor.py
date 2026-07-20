@@ -1,6 +1,6 @@
 from pprint import pprint
 
-from trackma.extras import AnimeInfoExtractor
+from hakubun.extras import AnimeInfoExtractor
 
 DEFAULTS = {
     'resolution': '',

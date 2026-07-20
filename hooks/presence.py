@@ -16,8 +16,8 @@ from threading import Thread
 from pypresence.client import Client
 from pypresence.exceptions import InvalidID, InvalidPipe
 
-from trackma.utils import estimate_aired_episodes
-from trackma.utils import Tracker
+from hakubun.utils import estimate_aired_episodes
+from hakubun.utils import Tracker
 
 class DiscordRPC(Thread):
     """

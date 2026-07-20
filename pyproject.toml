@@ -62,9 +62,9 @@ Repository = "https://github.com/trektn/hakubun"
 Upstream = "https://github.com/z411/trackma"
 
 [project.scripts]
-hakubun = "trackma.ui.cli:main"
-hakubun-gtk = "trackma.ui.gtk:main"
-hakubun-qt = "trackma.ui.qt:main"
+hakubun = "hakubun.ui.cli:main"
+hakubun-gtk = "hakubun.ui.gtk:main"
+hakubun-qt = "hakubun.ui.qt:main"
 
 [tool.uv]
 
