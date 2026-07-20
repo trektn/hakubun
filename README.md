@@ -223,3 +223,10 @@ Authors
 
 Hakubun is a fork of Trackma, originally written by z411 <z411@omaera.org>. For other upstream
 contributors see the AUTHORS file.
+
+Acknowledgments
+---------------
+
+The optional `anitopy` title parser uses the
+[anitopy](https://github.com/igorcafe/anitopy) library, a Python port of
+[Anitomy](https://github.com/erengy/anitomy).

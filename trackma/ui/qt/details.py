@@ -20,11 +20,12 @@ from trackma.ui.qt.widgets import DetailsWidget
 
 
 class DetailsDialog(QDialog):
-    def __init__(self, parent, worker, show):
+    def __init__(self, parent, worker, show, on_go_to=None):
         QDialog.__init__(self, parent)
         self.setMinimumSize(530, 550)
         self.setWindowTitle('Details')
         self.worker = worker
+        self.on_go_to = on_go_to
 
         main_layout = QVBoxLayout()
         details = DetailsWidget(self, worker)
@@ -34,7 +35,19 @@ class DetailsDialog(QDialog):
         bottom_buttons.setCenterButtons(True)
         bottom_buttons.rejected.connect(self.close)
 
+        # Only set when this show is already in the user's list (see
+        # AddDialog.s_show_details) -- lets the user jump straight to it
+        # in the main list instead of going through Add again.
+        if on_go_to is not None:
+            go_to_btn = bottom_buttons.addButton(
+                'Go to', QDialogButtonBox.ButtonRole.ActionRole)
+            go_to_btn.clicked.connect(self.s_go_to)
+
         main_layout.addWidget(bottom_buttons)
 
         self.setLayout(main_layout)
         details.load(show)
+
+    def s_go_to(self):
+        self.on_go_to()
+        self.close()
