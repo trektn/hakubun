@@ -14,6 +14,7 @@ Unreleased
 - New feature: Optional "Switch to the All category when filtering" toggle (GTK and Qt) that jumps to the All tab when typing in the filter bar, so the search covers the whole list instead of just the current status tab.
 - New feature: A "Go to" action for search results already in the user's list -- GTK's Add button becomes "Go to" for such results; Qt gets a "Go to" button in the show-details popup. Both jump to the show's status tab in the main list and highlight it, instead of re-adding it.
 - New feature: Right-click "Move to" on search results (GTK and Qt) for results already in the user's list, matching the main list's existing Move to submenu.
+- New feature: (Qt) A "Now Playing" sidebar section shows the currently tracked show/episode, playback progress, and Previous/Next Episode buttons whenever the tracker detects something playing.
 
 v0.10.3
 - Bugfix: (Qt) Fixed filter's Invert checkbox

@@ -19,13 +19,77 @@ import os
 
 from PyQt6 import QtCore, QtGui
 from PyQt6.QtWidgets import (QAbstractItemView, QDoubleSpinBox, QFormLayout, QHBoxLayout, QHeaderView,
-                             QLabel, QListView, QScrollArea, QSlider, QSplitter, QTableView,
+                             QLabel, QListView, QProgressBar, QScrollArea, QSlider, QSplitter, QTableView,
                              QVBoxLayout, QWidget)
 
 from trackma import utils
 from trackma.ui.qt.delegates import AddListDelegate, ShowsTableDelegate
 from trackma.ui.qt.models import AddListModel, AddListProxy, AddTableModel, ShowListModel, ShowListProxy
+from trackma.ui.qt.util import getIcon
 from trackma.ui.qt.workers import ImageWorker
+
+
+class PlaybackBar(QWidget):
+    """
+    A compact "now playing" row: a play/pause indicator, a progress bar
+    for how far into the episode playback is, and the percentage.
+    Driven directly off a tracker status dict (see TrackerBase.get_status).
+    """
+
+    def __init__(self, parent=None, progress_color=None):
+        super().__init__(parent)
+
+        layout = QHBoxLayout()
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        self.play_icon = QLabel()
+        self.play_icon.setFixedWidth(18)
+        self.play_icon.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(self.play_icon)
+
+        self.bar = QProgressBar()
+        self.bar.setTextVisible(False)
+        self.bar.setRange(0, 100)
+        # The OS-theme default chunk color reads as near-black on most
+        # dark themes -- use the same accent the show list's own
+        # completion bar uses (colors['progress_fg']) instead.
+        self.bar.setStyleSheet(
+            'QProgressBar { background-color: palette(base); border: none; border-radius: 3px; }'
+            'QProgressBar::chunk { background-color: %s; border-radius: 3px; }'
+            % (progress_color or '#74C0FA'))
+        layout.addWidget(self.bar, 1)
+
+        self.percent_label = QLabel('')
+        self.percent_label.setMinimumWidth(36)
+        self.percent_label.setAlignment(
+            QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        layout.addWidget(self.percent_label)
+
+        self.setLayout(layout)
+
+        self._play_pixmap = getIcon('media-playback-start').pixmap(16, 16)
+        self._pause_pixmap = getIcon('media-playback-pause').pixmap(16, 16)
+
+    def update_status(self, status):
+        state = status.get('state')
+        # IGNORED is a recognized, still-playing episode the tracker just
+        # isn't going to submit progress for (e.g. a rewatch) -- position
+        # and the play/pause indicator should still reflect it.
+        playing = state in (utils.Tracker.PLAYING, utils.Tracker.IGNORED)
+
+        if playing:
+            paused = bool(status.get('paused'))
+            self.play_icon.setPixmap(
+                self._pause_pixmap if paused else self._play_pixmap)
+        else:
+            self.play_icon.setPixmap(QtGui.QPixmap())
+
+        length = status.get('length')
+        offset = status.get('viewOffset')
+        if playing and length and offset is not None:
+            percent = min(100, round(offset / length * 100))
+            self.bar.setValue(percent)
+            self.percent_label.setText('%d%%' % percent)
 
 
 class DetailsWidget(QWidget):
