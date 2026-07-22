@@ -278,8 +278,8 @@ def regex_find_videos(subdirectory=''):
 
 
 def regex_rename_files(pattern, source_dir, dest_dir):
-    in_path = os.path.expanduser(os.path.join('~', '.trackma', source_dir))
-    out_path = os.path.expanduser(os.path.join('~', '.trackma', dest_dir))
+    in_path = to_data_path(source_dir)
+    out_path = to_data_path(dest_dir)
     for filename in os.listdir(in_path):
         if re.match(pattern, filename):
             in_file = os.path.join(in_path, filename)
