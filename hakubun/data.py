@@ -454,7 +454,37 @@ class Data:
         # sets _save_info() and stores a non-partial entry, so this only
         # fires once per show.
         if info is None or info.get('_details_pending'):
-            info = self.api.request_info([show])[0]
+            # request_info can legitimately come back empty -- most often
+            # when the show id belongs to a different API than the one now
+            # loaded (e.g. a show left over in Now Playing after switching
+            # accounts; Kitsu's findById returns null for a foreign id and
+            # drops it). Surface that as a normal DataError the callers
+            # already handle, instead of an IndexError that crashes the
+            # loader thread.
+            try:
+                results = self.api.request_info([show])
+            except NotImplementedError:
+                # Backend can't fetch details on demand (e.g. legacy
+                # Kitsu). Serve whatever the cache has rather than
+                # crashing the loader thread.
+                if info is not None:
+                    if info.get('_details_pending'):
+                        # Clear the pending flag so the check above stops
+                        # re-firing request_info just to catch this
+                        # exception again. Swap in a copy whole, so a
+                        # concurrent pickle of the infocache never sees a
+                        # dict change size mid-iteration.
+                        info = dict(info)
+                        info.pop('_details_pending', None)
+                        self.infocache[showid] = info
+                    return self._sanitized_info(info)
+                raise utils.DataError(
+                    "Show details aren't supported by this API.")
+            if not results:
+                raise utils.DataError(
+                    "No details found for '%s' (id %s)."
+                    % (show.get('title', '?'), showid))
+            info = results[0]
         return self._sanitized_info(info)
 
     @staticmethod
@@ -656,7 +686,7 @@ class Data:
         if os.path.isfile(self.lock_file):
             raise utils.DataFatal("Database is locked by another process. "
                                   "If you\'re sure there's no other process is using it, "
-                                  "remove the file ~/.trackma/lock")
+                                  "remove the file %s" % self.lock_file)
 
         f = open(self.lock_file, 'w')
         f.close()
