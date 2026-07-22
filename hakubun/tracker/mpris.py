@@ -388,7 +388,16 @@ class MprisTracker(tracker.TrackerBase):
         # reported a duration, e.g. right when playback starts.
         if self.config['mpris_obey_update_wait_s'] or not player.length:
             return None
-        return round((player.length / 1000) * 0.80)
+        target_s = (player.length / 1000) * 0.80
+        if self.view_offset is not None:
+            # Anchor to the actual playback position (view_offset, ms):
+            # resuming an episode mid-way or seeking shouldn't restart
+            # the whole percentage wait from zero. update_timer()
+            # measures wait_s against _effective_elapsed_s(), so re-add
+            # that same elapsed time on top of the playback remaining.
+            remaining_s = max(0.0, target_s - self.view_offset / 1000)
+            return round(remaining_s + self._effective_elapsed_s())
+        return round(target_s)
 
     def _start_timer(self):
         self.resume_timer()
@@ -417,13 +426,14 @@ class MprisTracker(tracker.TrackerBase):
                 # The view_offset is not important, so we ignore errors.
                 pass
 
-            # The player may not have reported a duration yet at the
-            # moment playback started (mpris:length arriving a beat
-            # after xesam:title/url is common) -- keep retrying every
-            # tick until it resolves rather than being stuck on the
-            # fixed-wait fallback for the rest of the episode.
-            if self.wait_s is None:
-                self.wait_s = self._percentage_wait_s(self.active_player)
+            # Recompute every tick: the player may not have reported a
+            # duration yet right when playback started (mpris:length
+            # arriving a beat after xesam:title/url is common), and the
+            # percentage wait tracks the live playback position, which
+            # moves under seeks and pauses.
+            new_wait = self._percentage_wait_s(self.active_player)
+            if new_wait is not None:
+                self.wait_s = new_wait
 
         if self.last_show_tuple:
             self.update_timer(self.last_state, self.last_show_tuple)

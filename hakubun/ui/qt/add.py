@@ -14,6 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+import html
 from datetime import date
 
 from PyQt6 import QtCore
@@ -156,9 +157,9 @@ class AddDialog(QDialog):
             self.search_txt.setFocus()
 
     def worker_call(self, function, ret_function, *args, **kwargs):
-        # Run worker in a thread
+        # Run worker in a thread. set_function owns starting/queueing;
+        # don't call worker.start() here (see EngineWorker.set_function).
         self.worker.set_function(function, ret_function, *args, **kwargs)
-        self.worker.start()
 
     def _enable_widgets(self, enable):
         self.search_btn.setEnabled(enable)
@@ -315,7 +316,7 @@ class AddStatusDialog(QDialog):
         layout.setSpacing(12)
 
         # Show title
-        title_label = QLabel(f'<b>{show_title}</b>')
+        title_label = QLabel(f'<b>{html.escape(show_title)}</b>')
         title_label.setWordWrap(True)
         layout.addWidget(title_label)
 
