@@ -14,6 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+import html
 from datetime import date
 
 from PyQt6 import QtCore
@@ -315,7 +316,7 @@ class AddStatusDialog(QDialog):
         layout.setSpacing(12)
 
         # Show title
-        title_label = QLabel(f'<b>{show_title}</b>')
+        title_label = QLabel(f'<b>{html.escape(show_title)}</b>')
         title_label.setWordWrap(True)
         layout.addWidget(title_label)
 
