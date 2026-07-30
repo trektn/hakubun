@@ -66,7 +66,6 @@ class AnitopyWrapper():
             import traceback
             traceback.print_exc()
             data = {}
-            return
 
         self.episode_number = self.__extractEpisodeNumber(data)
         self.anime_title = self.__extractAnimeTitle(data)
