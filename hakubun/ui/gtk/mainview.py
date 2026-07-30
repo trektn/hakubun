@@ -76,6 +76,10 @@ class MainView(Gtk.Box):
 
         self._image_thread = None
         self._current_page = None
+        # GtkScale is continuous and only rounds to `digits` decimals, so
+        # on a non-decimal step (Kitsu's 0.5) it drags in 0.1s. The active
+        # system's display step is used to snap USER drags (change-value).
+        self._score_display_step = 1.0
         self.statusbox_handler = None
         self.notebook_switch_handler = None
         self._hovering_over_tabs = None
@@ -132,6 +136,11 @@ class MainView(Gtk.Box):
         self.spinbtn_score.connect("activate", self._on_spinbtn_score_activate)
         self.spinbtn_score.connect("output", self._on_spinbtn_score_output)
         self.btn_score_set.connect("clicked", self._on_spinbtn_score_activate)
+        # Snap the slider to the active system's step so e.g. Kitsu's
+        # slider moves in 0.5s, not 0.1s. change-value fires ONLY on user
+        # drag/scroll/keyboard -- never on programmatic set_value/set_range
+        # -- so it can't re-enter GTK during widget setup (which crashes).
+        self.scale_score.connect("change-value", self._on_scale_change_value)
         self.statusbox_handler = self.statusbox.connect(
             "changed", self._on_statusbox_changed)
         self.notebook_switch_handler = self.notebook.connect(
@@ -315,6 +324,17 @@ class MainView(Gtk.Box):
         self.statusbox.set_model(self.statusmodel)
         self.statusbox.show_all()
 
+    def _on_scale_change_value(self, scale, _scroll, value):
+        """Snap a USER drag/scroll of the slider to the active system's
+        display step (Kitsu 0.5, AniList 0.1, MAL 1), keeping the value
+        on-grid. Fires only on user interaction -- not on programmatic
+        set_value/set_range -- so it never re-enters GTK during setup."""
+        step = self._score_display_step or 1.0
+        upper = scale.get_adjustment().get_upper()
+        snapped = min(max(round(value / step) * step, 0.0), upper)
+        scale.set_value(snapped)
+        return True   # handled: don't also apply the raw continuous value
+
     def _set_score_ranges(self):
         mediainfo = self._engine.mediainfo
         display_max, display_step, decimals = utils.score_display_range(mediainfo)
@@ -322,6 +342,7 @@ class MainView(Gtk.Box):
 
         # scale_score and spinbtn_score share score_adjustment, so setting
         # it here keeps both widgets in sync automatically.
+        self._score_display_step = display_step or 1.0
         self.spinbtn_score.set_value(0)
         self.spinbtn_score.set_digits(decimals)
         self.spinbtn_score.set_range(0, display_max)
