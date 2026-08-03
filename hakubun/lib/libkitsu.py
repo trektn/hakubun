@@ -92,7 +92,7 @@ class libkitsu(lib):
         'statuses': default_statuses,
         'statuses_dict': default_statuses_dict,
         'score_max': 5,
-        'score_step': 0.25,
+        'score_step': 0.5,
     }
     mediatypes['manga'] = {
         'has_progress': True,
@@ -113,7 +113,7 @@ class libkitsu(lib):
             'planned': 'Plan to Read'
         },
         'score_max': 5,
-        'score_step': 0.25,
+        'score_step': 0.5,
     }
     url = 'https://kitsu.app/api'
     prefix = 'https://kitsu.app/api/edge'

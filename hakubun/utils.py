@@ -284,8 +284,8 @@ def regex_find_videos(subdirectory=''):
 
 
 def regex_rename_files(pattern, source_dir, dest_dir):
-    in_path = os.path.expanduser(os.path.join('~', '.trackma', source_dir))
-    out_path = os.path.expanduser(os.path.join('~', '.trackma', dest_dir))
+    in_path = to_data_path(source_dir)
+    out_path = to_data_path(dest_dir)
     for filename in os.listdir(in_path):
         if re.match(pattern, filename):
             in_file = os.path.join(in_path, filename)
@@ -994,6 +994,27 @@ def date_to_season(dt) -> str:
     seasons = (Season.WINTER, Season.SPRING, Season.SUMMER, Season.FALL)
     season = seasons[(dt.month - 1) // 3]
     return f'{season!s} {dt.year}'
+
+
+_RELEASE_STATUS_LABELS = {
+    Status.ONGOING: 'Airing',
+    Status.FINISHED: 'Finished',
+    Status.NOTYET: 'Upcoming',
+    Status.CANCELLED: 'Cancelled',
+}
+
+
+def release_status_label(status) -> str:
+    """Human label for a show's airing status ('Airing', 'Finished',
+    'Upcoming', ...). Shared by the list views' Release Status column;
+    same paint-path rules as get_season_label below: cheap, and never
+    mutates anything."""
+    label = _RELEASE_STATUS_LABELS.get(status)
+    if label:
+        return label
+    if status in (None, Status.UNKNOWN):
+        return '?'
+    return str(status)
 
 
 def get_season_label(show) -> str:
