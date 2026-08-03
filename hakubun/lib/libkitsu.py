@@ -504,11 +504,8 @@ class libkitsu(lib):
         if 'my_status' in item:
             values['data']['attributes']['status'] = item['my_status']
         if 'my_score' in item:
-            # ratingTwenty (2-20) only accepts EVEN values (half-stars);
-            # my_score is on a 0-5/0.5 grid (score_step) so my_score*4 is
-            # always even. 0 clears the rating.
-            values['data']['attributes']['ratingTwenty'] = int(
-                item['my_score']*4) or None
+            values['data']['attributes']['ratingTwenty'] = \
+                utils.kitsu_rating_twenty(item['my_score'])
 
         return json.dumps(values)
 
