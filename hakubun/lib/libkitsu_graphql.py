@@ -531,7 +531,7 @@ class libkitsu_graphql(lib):
             input_fields['status'] = self._status_to_gql(item['my_status'])
         if 'my_score' in item:
             # Same 1-20 scale as the REST ratingTwenty field; 0 clears it.
-            input_fields['rating'] = int(item['my_score'] * 4) or None
+            input_fields['rating'] = utils.kitsu_rating_twenty(item['my_score'])
 
     def _check_mutation_errors(self, payload, action):
         errors = payload.get('errors')

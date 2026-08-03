@@ -504,8 +504,8 @@ class libkitsu(lib):
         if 'my_status' in item:
             values['data']['attributes']['status'] = item['my_status']
         if 'my_score' in item:
-            values['data']['attributes']['ratingTwenty'] = int(
-                item['my_score']*4) or None
+            values['data']['attributes']['ratingTwenty'] = \
+                utils.kitsu_rating_twenty(item['my_score'])
 
         return json.dumps(values)
 

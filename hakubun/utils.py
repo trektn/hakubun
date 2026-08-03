@@ -31,6 +31,12 @@ import time
 import uuid
 from enum import Enum, auto
 
+try:
+    from rapidfuzz import fuzz as rapidfuzz_fuzz
+    from rapidfuzz import process as rapidfuzz_process
+except ImportError:
+    rapidfuzz_fuzz = rapidfuzz_process = None
+
 VERSION = '0.15'
 
 DATADIR = os.path.dirname(__file__) + '/data'
@@ -384,6 +390,81 @@ def estimate_aired_episodes(show):
     return 0
 
 
+GUESS_SHOW_CUTOFF = 0.7
+
+# Flat (choices, owners) view of the most recent tracker list, so a library scan
+# doesn't rebuild it once per filename. _get_tracker_list builds a fresh dict on
+# every call, so keying the cache by object identity makes it a guaranteed miss
+# for any caller that doesn't hold one dict across a whole scan (e.g. the
+# inotify-driven single-file add path) -- keyed by a cheap (count, id-set hash)
+# content signature instead, so a rebuilt-but-unchanged list still hits. This
+# won't notice a show's titles/aliases changing with the id set held constant;
+# that's an accepted, harmless staleness window (a slightly stale match list,
+# not a crash) rather than a full invalidation contract.
+_guess_index = (None, None, None)
+
+
+def _title_index(showlist):
+    global _guess_index
+
+    signature = (len(showlist), hash(frozenset(showlist.keys())))
+    (cached_signature, choices, owners) = _guess_index
+    if cached_signature == signature:
+        return (choices, owners)
+
+    choices, owners = [], []
+    for item in showlist.values():
+        for title in item['titles']:
+            choices.append(title.lower())
+            owners.append(item)
+
+    _guess_index = (signature, choices, owners)
+    return (choices, owners)
+
+
+def _guess_show_difflib(show_title, showlist):
+    """ Fallback matcher for when rapidfuzz isn't installed.
+
+    Same metric and same result as a plain ratio() sweep, but skips the real
+    comparison whenever difflib's cheap upper bounds already rule a title out.
+    Roughly 4x faster than the naive loop on a large list.
+
+    Note the argument order matters: difflib's ratio() is not symmetric, so the
+    query has to stay as seq1 the way the original sweep had it.
+    """
+    highest_ratio = (None, 0)
+    matcher = difflib.SequenceMatcher()
+    matcher.set_seq1(show_title.lower())
+
+    for item in showlist.values():
+        # Make sure to search through all the aliases
+        for title in item['titles']:
+            matcher.set_seq2(title.lower())
+            if matcher.real_quick_ratio() <= highest_ratio[1]:
+                continue
+            if matcher.quick_ratio() <= highest_ratio[1]:
+                continue
+            ratio = matcher.ratio()
+            if ratio > highest_ratio[1]:
+                highest_ratio = (item, ratio)
+
+    return highest_ratio
+
+
+def _guess_show_rapidfuzz(show_title, showlist):
+    (choices, owners) = _title_index(showlist)
+
+    # fuzz.ratio is difflib's ratio computed with an optimal alignment rather
+    # than difflib's greedy one, so it only ever differs on pairs far below the
+    # cutoff -- where difflib undercounts and both answers mean "no match".
+    match = rapidfuzz_process.extractOne(
+        show_title.lower(), choices, scorer=rapidfuzz_fuzz.ratio)
+
+    if not match:
+        return (None, 0)
+    return (owners[match[2]], match[1] / 100)
+
+
 def guess_show(show_title, tracker_list):
     """ Take a title and search for it fuzzily in the tracker list """
     (showlist, altnames_map) = tracker_list
@@ -395,25 +476,26 @@ def guess_show(show_title, tracker_list):
         if showid in showlist:
             return showlist[showid]
 
-    # Use difflib to see if the show title is similar to
-    # one we have in the list
-    highest_ratio = (None, 0)
-    matcher = difflib.SequenceMatcher()
-    matcher.set_seq1(show_title.lower())
-
-    # Compare to every show in our list to see which one
-    # has the most similar name
-    for item in showlist.values():
-        # Make sure to search through all the aliases
-        for title in item['titles']:
-            matcher.set_seq2(title.lower())
-            ratio = matcher.ratio()
-            if ratio > highest_ratio[1]:
-                highest_ratio = (item, ratio)
+    # Compare to every show in our list to see which one has the most
+    # similar name. This runs once per unique title in the library during a
+    # scan, against every title and alias, so it dominates scan time.
+    if rapidfuzz_fuzz:
+        highest_ratio = _guess_show_rapidfuzz(show_title, showlist)
+    else:
+        highest_ratio = _guess_show_difflib(show_title, showlist)
 
     playing_show = highest_ratio[0]
-    if highest_ratio[1] > 0.7:
+    if highest_ratio[1] > GUESS_SHOW_CUTOFF:
         return playing_show
+
+
+def kitsu_rating_twenty(my_score):
+    """Convert a my_score (0-5, half-star/0.5 grid) to Kitsu's
+    ratingTwenty (2-20, EVEN values only) -- my_score*4 always lands on
+    an even value on that grid. Used by both the REST and GraphQL
+    Kitsu adapters. 0 means 'clear the rating' (None), not a real
+    zero score."""
+    return int(my_score * 4) or None
 
 
 def redirect_show(show_tuple, redirections, tracker_list):
