@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@ from hakubun import utils
 
 class lib:
     """
-    Base interface for creating API implementations for Trackma.
+    Base interface for creating API implementations for Hakubun.
 
     messenger: Messenger object to send useful messages to
     mediatype: String containing the media type to be used

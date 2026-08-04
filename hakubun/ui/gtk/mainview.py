@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -117,7 +117,7 @@ class MainView(Gtk.Box):
                               self._notebook_handle_events)
 
         self.statusbar = Gtk.Statusbar()
-        self.statusbar.push(0, 'Trackma GTK ' + utils.VERSION)
+        self.statusbar.push(0, 'Hakubun GTK ' + utils.VERSION)
         self.statusbar.show()
         self.pack_start(self.statusbar, False, False, 0)
 
@@ -170,7 +170,7 @@ class MainView(Gtk.Box):
 
         try:
             self._engine.start()
-        except utils.TrackmaFatal as e:
+        except utils.HakubunFatal as e:
             self.emit('error-fatal', e)
             return
 
@@ -184,9 +184,9 @@ class MainView(Gtk.Box):
     def _engine_reload_task(self, account, mediatype, extern_widget):
         try:
             self._engine.reload(account, mediatype)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.emit('error', e)
-        except utils.TrackmaFatal as e:
+        except utils.HakubunFatal as e:
             self.emit('error-fatal', e)
             return
 
@@ -209,7 +209,7 @@ class MainView(Gtk.Box):
         self.set_buttons_sensitive_idle(True)
 
     def _reset_widgets(self):
-        self.show_title.set_text('<span size="14000"><b>Trackma</b></span>')
+        self.show_title.set_text('<span size="14000"><b>Hakubun</b></span>')
         self.show_title.set_use_markup(True)
         self.image_box.reset()
 
@@ -444,7 +444,7 @@ class MainView(Gtk.Box):
 
     def filter_shows(self, query):
         """Filters every tab's list down to shows whose title matches
-        query (called from the search bar owned by TrackmaWindow)."""
+        query (called from the search bar owned by HakubunWindow)."""
         for page in self._pages.values():
             page.show_tree_view.get_model().props.model.set_search_query(query)
 
@@ -626,7 +626,7 @@ class MainView(Gtk.Box):
         search result)."""
         try:
             show = self._engine.get_show_info(showid)
-        except utils.TrackmaError:
+        except utils.HakubunError:
             return
 
         status = show['my_status']

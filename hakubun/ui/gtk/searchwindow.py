@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -37,7 +37,7 @@ class SearchThread(threading.Thread):
     def run(self):
         try:
             self._entries = self._engine.search(self._search_text)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._entries = []
             self._error = e
 
@@ -195,7 +195,7 @@ class SearchWindow(Gtk.Window):
 
         try:
             self._engine.add_show(show, chosen_status)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.emit('search-error', e)
 
     def _on_selection_changed(self, selection):
@@ -254,7 +254,7 @@ class SearchWindow(Gtk.Window):
     def _on_move_to_activate(self, menu_item, showid, status):
         try:
             self._engine.set_status(showid, status)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.emit('search-error', str(e))
             return
 

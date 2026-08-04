@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -154,7 +154,7 @@ class KodiTracker(tracker.TrackerBase):
                     self.resume_timer()
 
             elif self.status_log[-1] == AUTH_REQUIRED:
-                self.msg.warn("Authentication needed by Kodi, login in the settings and restart trackma.")
+                self.msg.warn("Authentication needed by Kodi, login in the settings and restart Hakubun.")
             elif self.status_log[-1] == NOT_RUNNING:
                 self.msg.warn("Kodi HTTP Server is not running.")
 

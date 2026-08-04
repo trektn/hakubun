@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -221,7 +221,7 @@ def parse_config(filename, default):
         # There's a syntax error in the config file
         errorString = "Erroneous config %s requires manual fixing or deletion to proceed." % filename
         log_error(errorString)
-        raise TrackmaFatal(errorString)
+        raise HakubunFatal(errorString)
 
     return config
 
@@ -636,39 +636,39 @@ def show():
     }
 
 
-class TrackmaError(Exception):
+class HakubunError(Exception):
     pass
 
 
-class EngineError(TrackmaError):
+class EngineError(HakubunError):
     pass
 
 
-class DataError(TrackmaError):
+class DataError(HakubunError):
     pass
 
 
-class APIError(TrackmaError):
+class APIError(HakubunError):
     pass
 
 
-class AccountError(TrackmaError):
+class AccountError(HakubunError):
     pass
 
 
-class TrackmaFatal(Exception):
+class HakubunFatal(Exception):
     pass
 
 
-class EngineFatal(TrackmaFatal):
+class EngineFatal(HakubunFatal):
     pass
 
 
-class DataFatal(TrackmaFatal):
+class DataFatal(HakubunFatal):
     pass
 
 
-class APIFatal(TrackmaFatal):
+class APIFatal(HakubunFatal):
     pass
 
 

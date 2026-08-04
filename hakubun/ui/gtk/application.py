@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,16 +19,16 @@ require_version('Gtk', '3.0')
 require_version('Gdk', '3.0')
 
 from hakubun import utils  # noqa: E402
-from hakubun.ui.gtk.window import TrackmaWindow  # noqa: E402
+from hakubun.ui.gtk.window import HakubunWindow  # noqa: E402
 from gi.repository import GLib, Gio, Gtk  # noqa: E402
 
 
-class TrackmaApplication(Gtk.Application):
-    __gtype_name__ = 'TrackmaApplication'
+class HakubunApplication(Gtk.Application):
+    __gtype_name__ = 'HakubunApplication'
 
     def __init__(self):
         super().__init__(
-            application_id="com.github.z411.TrackmaGtk",
+            application_id="com.github.trektn.HakubunGtk",
             flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE | Gio.ApplicationFlags.NON_UNIQUE
         )
 
@@ -51,7 +51,7 @@ class TrackmaApplication(Gtk.Application):
     def do_activate(self):
         try:
             self.create_window()
-        except utils.TrackmaFatal as e:
+        except utils.HakubunFatal as e:
             self.message_error(e)
 
     def do_command_line(self, command_line):
@@ -91,7 +91,7 @@ class TrackmaApplication(Gtk.Application):
 
     def create_window(self):
         if not self.window:
-            self.window = TrackmaWindow(self, self.debug)
+            self.window = HakubunWindow(self, self.debug)
 
         if not self.window._engine:
             self.window.init_account_selection()

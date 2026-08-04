@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,8 +21,8 @@ from hakubun import utils
 require_version('Gdk', '3.0')
 
 
-class TrackmaStatusIcon(Gtk.StatusIcon):
-    __gtype_name__ = 'TrackmaStatusIcon'
+class HakubunStatusIcon(Gtk.StatusIcon):
+    __gtype_name__ = 'HakubunStatusIcon'
 
     __gsignals__ = {
         'hide-clicked': (GObject.SignalFlags.RUN_FIRST, None, ()),
@@ -33,7 +33,7 @@ class TrackmaStatusIcon(Gtk.StatusIcon):
     def __init__(self):
         Gtk.StatusIcon.__init__(self)
         self.set_from_file(utils.DATADIR + '/icon.png')
-        self.set_tooltip_text('Trackma GTK')
+        self.set_tooltip_text('Hakubun GTK')
         self.connect('activate', self._tray_status_event)
         self.connect('popup-menu', self._tray_status_menu_event)
 

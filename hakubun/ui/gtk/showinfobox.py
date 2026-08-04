@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -82,7 +82,7 @@ class ShowInfoBox(Gtk.Box):
         # Thread to ask the engine for show details
         try:
             self.details = self._engine.get_show_details(self._show)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.details = None
             self.details_e = e
 

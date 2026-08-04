@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -105,7 +105,7 @@ class Engine:
         userfolder = "%s.%s" % (account['username'], account['api'])
         utils.make_dir(utils.to_data_path(userfolder))
 
-        self.msg.info('Trackma v{0} - using account {1}({2}).'.format(
+        self.msg.info('Hakubun v{0} - using account {1}({2}).'.format(
             utils.VERSION, account['username'], account['api']))
         self.msg.info('Reading config files...')
         try:
@@ -279,7 +279,7 @@ class Engine:
         else:
             try:
                 self.set_episode(show['id'], episode)
-            except utils.TrackmaError as e:
+            except utils.HakubunError as e:
                 self.msg.warn("Can't update episode: {}".format(e))
 
     def _tracker_unrecognised(self, show, episode):
@@ -367,7 +367,7 @@ class Engine:
         as it initializes the data handler.
         """
         if self.loaded:
-            raise utils.TrackmaError("Already loaded.")
+            raise utils.HakubunError("Already loaded.")
 
         self.msg.debug("Starting engine...")
 
@@ -375,7 +375,7 @@ class Engine:
         if sys.version_info[:2] == (3, 9):
             self.msg.warn("\n==============="
                           "\nDEPRECATION WARNING: Python 3.9 has reached end of life."
-                          "\nTrackma will drop support for it soon. It is recommended"
+                          "\nHakubun will drop support for it soon. It is recommended"
                           "\nto upgrade to Python 3.10 or newer."
                           "\n===============")
 
@@ -430,7 +430,7 @@ class Engine:
         if self.config['library_autoscan']:
             try:
                 self._scan_library_if_changed()
-            except utils.TrackmaError as e:
+            except utils.HakubunError as e:
                 self.msg.warn("Can't auto-scan library: {}".format(e))
 
         # Load hook files
