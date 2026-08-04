@@ -81,6 +81,15 @@ class ImageBox(Gtk.HBox):
         self._label_holder = Gtk.Label()
         self._label_holder.set_size_request(width, height)
 
+        # Only ever one of these is meant to be visible at a time (see
+        # set_image/set_text), but a parent window's show_all() re-reveals
+        # both, making the HBox twice as wide with the image stuck in its
+        # right half -- which reads as off-centered wherever the box is
+        # halign=CENTER (e.g. the Now Playing poster). no_show_all keeps
+        # show_all() from undoing the hide; visibility is managed manually.
+        self._image.set_no_show_all(True)
+        self._label_holder.set_no_show_all(True)
+
         self._image_thread = None
 
         if imaging_available:
