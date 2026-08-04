@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -62,7 +62,7 @@ class AnitopyWrapper():
             data = anitopy.parse(file_name)
         except Exception:
             # If Anitopy crashes while parsing a filename, print the traceback
-            # instead of crashing Trackma altogether.
+            # instead of crashing Hakubun altogether.
             import traceback
             traceback.print_exc()
             data = {}

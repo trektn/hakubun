@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -226,10 +226,10 @@ class EngineWorker(QtCore.QThread):
             ret = self.function(*self.args, **self.kwargs)
             self._call_done.emit(self._ret_function,
                                  {'success': True, 'result': ret})
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._error(e)
             self._call_done.emit(self._ret_function, {'success': False})
-        except utils.TrackmaFatal as e:
+        except utils.HakubunFatal as e:
             self._fatal(e)
             # Still resolve the call: leaving it unresolved would strand
             # every entry in _pending for the rest of the session.

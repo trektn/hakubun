@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@ from gi.repository import GObject, Gdk, Gtk, Pango
 
 from hakubun import utils
 from hakubun.ui.gtk import gtk_dir
-from hakubun.ui.gtk.statusicon import TrackmaStatusIcon
+from hakubun.ui.gtk.statusicon import HakubunStatusIcon
 
 
 def reprColor(gdkColor):
@@ -315,7 +315,7 @@ class SettingsWindow(Gtk.Window):
         self._button_toggled(self.checkbox_show_tray,
                              self.checkbox_tray_api_icon)
 
-        if not TrackmaStatusIcon.is_tray_available():
+        if not HakubunStatusIcon.is_tray_available():
             self.checkbox_show_tray.set_label(
                 'Show tray icon (Not supported in this environment)')
             self.checkbox_show_tray.set_sensitive(False)

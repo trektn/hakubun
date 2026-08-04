@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@ from hakubun import utils
 
 # Used to drag a show from a status tab's list onto a different status
 # tab's label to change its status (see ShowTreeView / MainView).
-DRAG_TARGETS = [Gtk.TargetEntry.new('application/x-trackma-showid', 0, 0)]
+DRAG_TARGETS = [Gtk.TargetEntry.new('application/x-hakubun-showid', 0, 0)]
 
 
 class ShowListStore(Gtk.ListStore):

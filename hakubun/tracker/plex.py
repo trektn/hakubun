@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -133,7 +133,7 @@ class PlexTracker(tracker.TrackerBase):
                     else:
                         pass
             elif self.status_log[-1] == CLAIMED and self.status_log[-2] == CLAIMED:
-                self.msg.warn("Claimed Plex Media Server, login in the settings and restart trackma.")
+                self.msg.warn("Claimed Plex Media Server, login in the settings and restart Hakubun.")
             elif self.status_log[-1] == NOT_RUNNING and self.status_log[-2] == NOT_RUNNING:
                 self.msg.warn("Plex Media Server is not running.")
 

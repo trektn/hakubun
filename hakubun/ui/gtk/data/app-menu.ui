@@ -58,7 +58,7 @@
       </item>
       <item>
         <attribute name="action">win.about</attribute>
-        <attribute name="label" translatable="yes">About Trackma</attribute>
+        <attribute name="label" translatable="yes">About Hakubun</attribute>
       </item>
       <item>
         <attribute name="action">app.quit</attribute>
@@ -142,7 +142,7 @@
         </item>
         <item>
           <attribute name="action">win.about</attribute>
-          <attribute name="label" translatable="yes">About _Trackma</attribute>
+          <attribute name="label" translatable="yes">About _Hakubun</attribute>
         </item>
       </submenu>
     </section>

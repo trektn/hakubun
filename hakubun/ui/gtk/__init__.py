@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,10 +23,10 @@ def main():
     import signal
     import sys
     from hakubun import utils
-    from .application import TrackmaApplication
+    from .application import HakubunApplication
 
     signal.signal(signal.SIGINT, signal.SIG_DFL)
 
-    print("Trackma GTK v{}".format(utils.VERSION))
-    app = TrackmaApplication()
+    print("Hakubun GTK v{}".format(utils.VERSION))
+    app = HakubunApplication()
     sys.exit(app.run(sys.argv))

@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -55,7 +55,7 @@ _PCOLOR_MEDIATYPE = '\001\033[0;33m\002'
 _PCOLOR_FILTER = '\001\033[0;35m\002'
 
 
-class Trackma_cmd(command.Cmd):
+class Hakubun_cmd(command.Cmd):
     """
     Main program, inherits from the useful Cmd class
     for interactive console
@@ -90,7 +90,7 @@ class Trackma_cmd(command.Cmd):
         super().__init__()
 
         if interactive:
-            print('Trackma v'+utils.VERSION+'  Copyright (C) 2012-2026  z411')
+            print('Hakubun v'+utils.VERSION+' - independent fork of Trackma, Copyright (C) 2012-2026  z411')
             print(
                 'This program comes with ABSOLUTELY NO WARRANTY; for details type `about\'')
             print('This is free software, and you are welcome to redistribute it')
@@ -100,7 +100,7 @@ class Trackma_cmd(command.Cmd):
         self.interactive = interactive
         self.debug = debug
 
-        self.accountman = Trackma_accounts()
+        self.accountman = Hakubun_accounts()
         if account_num:
             try:
                 self.account = self.accountman.get_account(account_num)
@@ -198,17 +198,17 @@ class Trackma_cmd(command.Cmd):
             self.engine.set_message_handler(self.messagehandler)
 
     def do_about(self, args):
-        print("Trackma {}  by z411 (z411@omaera.org)".format(utils.VERSION))
-        print("Trackma is an open source client for media tracking websites.")
-        print("https://github.com/z411/trackma")
+        print("Hakubun {}  by trektn".format(utils.VERSION))
+        print("Hakubun is an open source client for media tracking websites, an independent fork of Trackma.")
+        print("https://github.com/trektn/hakubun")
         print()
         print("This program is licensed under the GPLv3 and it comes with ABSOLUTELY NO WARRANTY.")
         print("Many contributors have helped to run this project; for more information see the AUTHORS file.")
         print("For more information about the license, see the COPYING file.")
         print()
-        print("If you encounter any problems please report them in https://github.com/z411/trackma/issues")
+        print("If you encounter any problems please report them in https://github.com/trektn/hakubun/issues")
         print()
-        print("This is the CLI version of Trackma. To see available commands type `help'.")
+        print("This is the CLI version of Hakubun. To see available commands type `help'.")
         print("For other available interfaces please see the README file.")
         print()
 
@@ -372,7 +372,7 @@ class Trackma_cmd(command.Cmd):
         try:
             show = self._get_show(args[0])
             details = self.engine.get_show_details(show)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
             return
 
@@ -416,7 +416,7 @@ class Trackma_cmd(command.Cmd):
         """
         try:
             entries = self.engine.search(args[0])
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
             return
 
@@ -436,7 +436,7 @@ class Trackma_cmd(command.Cmd):
             # Tell the engine to add the show
             try:
                 self.engine.add_show(show, self.filter_num)
-            except utils.TrackmaError as e:
+            except utils.HakubunError as e:
                 self.display_error(e)
 
     def do_del(self, args):
@@ -456,7 +456,7 @@ class Trackma_cmd(command.Cmd):
             do_delete = input("Delete %s? [y/N] " % show['title'])
             if do_delete.lower() == 'y':
                 self.engine.delete_show(show)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
     def do_rescan(self, args):
@@ -476,7 +476,7 @@ class Trackma_cmd(command.Cmd):
         try:
             args = self.engine.play_random()
             utils.spawn_process(args)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
     def do_tracker(self, args):
@@ -514,7 +514,7 @@ class Trackma_cmd(command.Cmd):
                     print("Show: N/A")
             else:
                 print("Not started")
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
     def do_play(self, args):
@@ -536,7 +536,7 @@ class Trackma_cmd(command.Cmd):
 
             args = self.engine.play_episode(show, episode)
             utils.spawn_process(args)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
     def do_openfolder(self, args):
@@ -563,7 +563,7 @@ class Trackma_cmd(command.Cmd):
         except OSError:
             # xdg-open failed.
             self.display_error("Could not open folder.")
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
     def do_update(self, args):
@@ -590,7 +590,7 @@ class Trackma_cmd(command.Cmd):
                     show['id'], ep or show['my_progress']+1)
         except IndexError:
             print("Missing arguments.")
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
     def do_score(self, args):
@@ -606,7 +606,7 @@ class Trackma_cmd(command.Cmd):
             self.engine.set_score(show['id'], args[1])
         except IndexError:
             print("Missing arguments.")
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
     def do_status(self, args):
@@ -634,7 +634,7 @@ class Trackma_cmd(command.Cmd):
         try:
             show = self._get_show(_showtitle)
             self.engine.set_status(show['id'], _filter_num)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
     def do_altname(self, args):
@@ -654,7 +654,7 @@ class Trackma_cmd(command.Cmd):
         except IndexError:
             print("Missing arguments")
             return
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
     def do_send(self, args):
@@ -663,7 +663,7 @@ class Trackma_cmd(command.Cmd):
         """
         try:
             self.engine.list_upload()
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
     def do_retrieve(self, args):
@@ -679,7 +679,7 @@ class Trackma_cmd(command.Cmd):
             else:
                 self.engine.list_download()
             self._load_list()
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
     def do_clearqueue(self, args):
@@ -688,7 +688,7 @@ class Trackma_cmd(command.Cmd):
         """
         try:
             self.engine.queue_clear()
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
     def do_viewqueue(self, args):
@@ -714,7 +714,7 @@ class Trackma_cmd(command.Cmd):
         """
         try:
             self.engine.unload()
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self.display_error(e)
 
         print('Bye!')
@@ -955,7 +955,7 @@ class Trackma_cmd(command.Cmd):
         print()
 
 
-class Trackma_accounts(AccountManager):
+class Hakubun_accounts(AccountManager):
     def _get_id(self, index):
         if index < 1:
             raise IndexError
@@ -1104,7 +1104,7 @@ def main():
     # Process args
     parser = argparse.ArgumentParser()
     parser.add_argument('-v', '--version', action='version',
-                        version='Trackma v%s' % utils.VERSION)
+                        version='Hakubun v%s' % utils.VERSION)
     parser.add_argument('-a', '--account', type=int,
                         help='Use specific account number.')
     parser.add_argument('-d', '--debug', action='store_true',
@@ -1115,8 +1115,8 @@ def main():
                         help='Arguments for the aforementioned command, if any.')
     args = parser.parse_args()
 
-    # Boot Trackma CLI
-    main_cmd = Trackma_cmd(args.account, args.debug,
+    # Boot Hakubun CLI
+    main_cmd = Hakubun_cmd(args.account, args.debug,
                            interactive=args.cmd is None)
     try:
         main_cmd.start()
@@ -1130,7 +1130,7 @@ def main():
                 main_cmd.execute(args.cmd, args.args, args.cmd)
         else:
             main_cmd.cmdloop()
-    except utils.TrackmaFatal as e:
+    except utils.HakubunFatal as e:
         main_cmd.forget_account()
         print("%s%s: %s%s" % (_COLOR_FATAL, type(e).__name__, e, _COLOR_RESET))
     except KeyboardInterrupt:

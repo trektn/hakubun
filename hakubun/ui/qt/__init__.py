@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,12 +23,12 @@ from hakubun.ui.qt.mainwindow import MainWindow
 
 
 def main():
-    print("Trackma-qt v{}".format(utils.VERSION))
+    print("Hakubun-qt v{}".format(utils.VERSION))
 
     debug = False
 
     if '-h' in sys.argv:
-        print("Usage: trackma-qt [options]")
+        print("Usage: hakubun-qt [options]")
         print()
         print('Options:')
         print(' -d  Shows debugging information')
@@ -52,15 +52,15 @@ def main():
               "Preview images will be disabled.")
 
     app = QApplication(sys.argv)
-    app.setApplicationName("trackma")
-    app.setDesktopFileName("trackma-qt")
+    app.setApplicationName("hakubun")
+    app.setDesktopFileName("hakubun-qt")
     if os.name == "nt":
         import ctypes
-        myappid = 'trackma' + utils.VERSION
+        myappid = 'hakubun' + utils.VERSION
         ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
     try:
         # keep the variable around to prevent it from being gc'ed
         main_window = MainWindow(debug)
         sys.exit(app.exec())
-    except utils.TrackmaFatal as e:
+    except utils.HakubunFatal as e:
         QMessageBox.critical(None, 'Fatal Error', "{0}".format(e), QMessageBox.StandardButton.Ok)

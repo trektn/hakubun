@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -154,7 +154,7 @@ class MainWindow(QMainWindow):
         self.action_delete.triggered.connect(self.s_delete)
         action_quit = QAction(getIcon('application-exit'), '&Quit', self)
         action_quit.setShortcut('Ctrl+Q')
-        action_quit.setStatusTip('Exit Trackma.')
+        action_quit.setStatusTip('Exit Hakubun.')
         action_quit.triggered.connect(self._exit)
 
         self.action_undo = QAction(getIcon('edit-undo'), '&Undo', self)
@@ -1428,12 +1428,23 @@ class MainWindow(QMainWindow):
         dialog.exec()
 
     def s_about(self):
+        # The window/taskbar icon is the plain hanko mark (see the
+        # QIcon set on QApplication near the top of __init__) -- About
+        # gets the fuller "Hakubun" wordmark instead, since it has the
+        # room to show it.
         QMessageBox.about(self, 'About %s %s' % (self.app_name, utils.VERSION),
-                          ('<p><b>About %s %s</b></p><p>Trackma is an open source client for media tracking websites.</p>'
+                          ('<p align="center"><img src="%s" width="128" height="128"></p>'
+                          '<p><b>About %s %s</b></p><p>Hakubun is an open source client for media tracking websites, an independent fork of Trackma.</p>'
                           '<p>This program is licensed under the GPLv3, for more information read COPYING file.</p>'
                           '<p>Thanks to all contributors. To see all contributors see AUTHORS file.</p>'
-                          '<p>Copyright (C) z411 - Icon by shuuichi</p>'
-                          '<p><a href="https://github.com/z411/trackma">https://github.com/z411/trackma</a></p>') % (self.app_name, utils.VERSION))
+                          '<p>Filename parsing uses <a href="https://github.com/igorcmoura/anitopy">Anitopy</a>, '
+                          'licensed under the Mozilla Public License 2.0.</p>'
+                          '<p>Optional fuzzy title matching uses '
+                          '<a href="https://github.com/rapidfuzz/RapidFuzz">RapidFuzz</a>, '
+                          'licensed under the MIT license.</p>'
+                          '<p>Copyright (C) z411</p>'
+                          '<p><a href="https://github.com/trektn/hakubun">https://github.com/trektn/hakubun</a></p>') % (
+                              utils.DATADIR + '/about_logo.png', self.app_name, utils.VERSION))
 
     def s_about_qt(self):
         QMessageBox.aboutQt(self, 'About Qt')
@@ -1483,7 +1494,7 @@ class MainWindow(QMainWindow):
                 if episode == (show['my_progress'] + 1):
                     delay = self.worker.engine.get_config(
                         'tracker_update_wait_s')
-                    self.tray.showMessage('Trackma Tracker', "Playing %s (%s / %s). Will update in %d seconds." % (
+                    self.tray.showMessage('Hakubun Tracker', "Playing %s (%s / %s). Will update in %d seconds." % (
                         show['title'], episode, show['total'] or '?', delay))
 
     def ws_changed_show_status(self, show, old_status=None):

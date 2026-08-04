@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -63,7 +63,7 @@ class AccountDialog(QDialog):
         self.edit_btns.setItemData(
             1, 'Change the local password/PIN for this account', QtCore.Qt.ItemDataRole.ToolTipRole)
         self.edit_btns.setItemData(
-            2, 'Remove this account from Trackma', QtCore.Qt.ItemDataRole.ToolTipRole)
+            2, 'Remove this account from Hakubun', QtCore.Qt.ItemDataRole.ToolTipRole)
         self.edit_btns.setItemData(
             3, 'Clear local DB for this account', QtCore.Qt.ItemDataRole.ToolTipRole)
         self.edit_btns.setCurrentIndex(0)

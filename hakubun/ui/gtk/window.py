@@ -1,4 +1,4 @@
-# This file is part of Trackma.
+# This file is part of Hakubun.
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
 import os
 import threading
 
-from gi.repository import GLib, Gdk, Gio, Gtk
+from gi.repository import GLib, Gdk, GdkPixbuf, Gio, Gtk
 
 from hakubun import messenger
 from hakubun import utils
@@ -30,12 +30,12 @@ from hakubun.ui.gtk.searchwindow import SearchWindow
 from hakubun.ui.gtk.settingswindow import SettingsWindow
 from hakubun.ui.gtk.showeventtype import ShowEventType
 from hakubun.ui.gtk.showinfowindow import ShowInfoWindow
-from hakubun.ui.gtk.statusicon import TrackmaStatusIcon
+from hakubun.ui.gtk.statusicon import HakubunStatusIcon
 
 
 @Gtk.Template.from_file(os.path.join(gtk_dir, 'data/window.ui'))
-class TrackmaWindow(Gtk.ApplicationWindow):
-    __gtype_name__ = 'TrackmaWindow'
+class HakubunWindow(Gtk.ApplicationWindow):
+    __gtype_name__ = 'HakubunWindow'
 
     btn_appmenu = Gtk.Template.Child()
     btn_search = Gtk.Template.Child()
@@ -81,7 +81,7 @@ class TrackmaWindow(Gtk.ApplicationWindow):
     def _init_widgets(self):
         Gtk.Window.set_default_icon_from_file(utils.DATADIR + '/icon.png')
         self.set_position(Gtk.WindowPosition.CENTER)
-        self.set_title('Trackma')
+        self.set_title('Hakubun')
 
         if self._config['remember_geometry']:
             self.resize(self._config['last_width'],
@@ -123,8 +123,8 @@ class TrackmaWindow(Gtk.ApplicationWindow):
         self.set_help_overlay(help_overlay)
 
         # Status icon
-        if TrackmaStatusIcon.is_tray_available():
-            self.statusicon = TrackmaStatusIcon()
+        if HakubunStatusIcon.is_tray_available():
+            self.statusicon = HakubunStatusIcon()
             self.statusicon.connect('hide-clicked', self._on_tray_hide_clicked)
             self.statusicon.connect(
                 'about-clicked', self._on_tray_about_clicked)
@@ -332,13 +332,13 @@ class TrackmaWindow(Gtk.ApplicationWindow):
         # already pick up -- no extra UI refresh needed here.
         try:
             self._engine.undo()
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._error_dialog(e)
 
     def _on_redo(self, action, param):
         try:
             self._engine.redo()
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._error_dialog(e)
 
     def _on_undo_stack_changed(self):
@@ -384,9 +384,9 @@ class TrackmaWindow(Gtk.ApplicationWindow):
 
             # GLib.idle_add(self._set_score_ranges)
             GLib.idle_add(self._main_view.populate_all_pages)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._error_dialog_idle(e)
-        except utils.TrackmaFatal as e:
+        except utils.HakubunFatal as e:
             self._show_accounts_idle(switch=False, forget=True)
             self._error_dialog_idle("Fatal engine error: %s" % e)
             return
@@ -401,7 +401,7 @@ class TrackmaWindow(Gtk.ApplicationWindow):
         self._set_buttons_sensitive_idle(False)
         try:
             self._engine.scan_library(rescan=True)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._error_dialog_idle(e)
 
         GLib.idle_add(self._main_view.populate_all_pages)
@@ -468,15 +468,25 @@ class TrackmaWindow(Gtk.ApplicationWindow):
         about = Gtk.AboutDialog(parent=self)
         about.set_modal(True)
         about.set_transient_for(self)
-        about.set_program_name("Trackma GTK")
+        about.set_program_name("Hakubun GTK")
         about.set_version(utils.VERSION)
         about.set_license_type(Gtk.License.GPL_3_0_ONLY)
         about.set_comments(
-            "Trackma is an open source client for media tracking websites.\nThanks to all contributors.")
-        about.set_website("https://github.com/z411/trackma")
+            "Hakubun is an open source client for media tracking websites, an independent fork of Trackma.\nThanks to all contributors.")
+        about.set_website("https://github.com/trektn/hakubun")
         about.set_copyright("© z411, et al.")
         about.set_authors(["See AUTHORS file"])
-        about.set_artists(["shuuichi"])
+        about.add_credit_section(
+            "Filename parsing",
+            ["Anitopy (MPL-2.0) https://github.com/igorcmoura/anitopy"])
+        about.add_credit_section(
+            "Fuzzy title matching (optional)",
+            ["RapidFuzz (MIT) https://github.com/rapidfuzz/RapidFuzz"])
+        # The window/tray icon is the plain hanko mark (see
+        # Gtk.Window.set_default_icon_from_file) -- About gets the fuller
+        # "Hakubun" wordmark instead, since it has the room to show it.
+        about.set_logo(GdkPixbuf.Pixbuf.new_from_file(
+            utils.DATADIR + '/about_logo.png'))
         about.connect('destroy', self._on_modal_destroy)
         about.connect('response', lambda dialog, response: dialog.destroy())
         about.present()
@@ -615,7 +625,7 @@ class TrackmaWindow(Gtk.ApplicationWindow):
         try:
             args = self._engine.play_episode(show)
             utils.spawn_process(args)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._error_dialog(e)
 
     def _play_episode(self, show_id, episode):
@@ -625,7 +635,7 @@ class TrackmaWindow(Gtk.ApplicationWindow):
                 episode = self.show_ep_num.get_value_as_int()
             args = self._engine.play_episode(show, episode)
             utils.spawn_process(args)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._error_dialog(e)
 
     def _play_episode_pick(self, show_id):
@@ -666,7 +676,7 @@ class TrackmaWindow(Gtk.ApplicationWindow):
         try:
             args = self._engine.play_random()
             utils.spawn_process(args)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._error_dialog(e)
 
     def _episode_add(self, show_id):
@@ -680,19 +690,19 @@ class TrackmaWindow(Gtk.ApplicationWindow):
     def _episode_set(self, show_id, episode):
         try:
             self._engine.set_episode(show_id, episode)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._error_dialog(e)
 
     def _set_score(self, show_id, score):
         try:
             self._engine.set_score(show_id, score)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._error_dialog(e)
 
     def _set_status(self, show_id, status):
         try:
             self._engine.set_status(show_id, status)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._error_dialog(e)
 
     def _open_details(self, show_id):
@@ -794,7 +804,7 @@ class TrackmaWindow(Gtk.ApplicationWindow):
         try:
             show = self._engine.get_show_info(show_id)
             self._engine.delete_show(show)
-        except utils.TrackmaError as e:
+        except utils.HakubunError as e:
             self._error_dialog_idle(e)
 
     def _set_buttons_sensitive_idle(self, sensitive):
