@@ -330,7 +330,7 @@ class libmal(lib):
         self.check_credentials()
         self.msg.info("Searching for {}...".format(criteria))
 
-        fields = 'alternative_titles,end_date,genres,id,main_picture,mean,media_type,' + self.total_str + ',popularity,rating,start_date,status,studios,synopsis,title'
+        fields = 'alternative_titles,end_date,genres,id,main_picture,mean,media_type,' + self.total_str + ',popularity,rating,start_date,start_season,status,studios,synopsis,title'
         params = {'fields': fields, 'nsfw': 'true'}
 
         if method == utils.SearchMethod.KW:
@@ -357,7 +357,7 @@ class libmal(lib):
         self.check_credentials()
         infolist = []
 
-        fields = 'alternative_titles,end_date,genres,id,main_picture,mean,media_type,' + self.total_str + ',popularity,rating,start_date,status,studios,synopsis,title'
+        fields = 'alternative_titles,end_date,genres,id,main_picture,mean,media_type,' + self.total_str + ',popularity,rating,start_date,start_season,status,studios,synopsis,title'
         params = {'fields': fields, 'nsfw': 'true'}
         for item in itemlist:
             data = self._request('GET', self.query_url + '/%s/%d' % (self.mediatype, item['id']), get=params, auth=True)
@@ -391,26 +391,47 @@ class libmal(lib):
     def _parse_info(self, item):
         info = utils.show()
         showid = item['id']
+        type_ = self.type_translate.get(item.get('media_type'), utils.Type.UNKNOWN)
+        status = self._translate_status(item['status'])
+
+        # MAL exposes only a single aggregate rating ("mean"); mirror
+        # AniList's details layout but collapse its Average/Mean score pair
+        # into one platform score line.
+        score = '%.2f' % item['mean'] if item.get('mean') else None
+
+        start_season = item.get('start_season')
+        if start_season:
+            season = ("%s %s" % (start_season.get('season', '').capitalize(),
+                                 start_season.get('year', ''))).strip() or None
+        else:
+            season = None
+
+        genres = [g['name'] for g in item.get('genres', [])]
+        studios = [s['name'] for s in item.get('studios', [])]
 
         info.update({
             'id': showid,
             'title': item['title'],
             'url': "https://myanimelist.net/%s/%d" % (self.mediatype, showid),
             'aliases': self._get_aliases(item),
-            'type': self.type_translate.get(item['media_type'], utils.Type.UNKNOWN),
+            'type': type_,
             'total': item[self.total_str],
-            'status': self._translate_status(item['status']),
+            'status': status,
             'image': item.get('main_picture', {}).get('large'),
             'start_date': self._str2date(item.get('start_date')),
             'end_date': self._str2date(item.get('end_date')),
+            'platform_score': score,
             'extra': [
                 ('English',         item['alternative_titles'].get('en')),
                 ('Japanese',        item['alternative_titles'].get('ja')),
                 ('Synonyms',        item['alternative_titles'].get('synonyms')),
+                ('Season',          season),
+                ('Genres',          genres),
+                ('Studios',         studios),
                 ('Synopsis',        utils.clean_synopsis(item.get('synopsis'))),
-                ('Type',            item.get('media_type')),
-                ('Mean score',   item.get('mean')),
-                ('Status',          self._translate_status(item['status'])),
+                ('Type',            type_),
+                ('Score',           score),
+                ('Status',          status),
             ]
         })
 
