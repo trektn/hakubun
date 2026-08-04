@@ -283,7 +283,9 @@ class MprisTracker(tracker.TrackerBase):
             if metadata and ('xesam:title' in metadata or 'xesam:url' in metadata):
                 title = safe_get_dbus_value(metadata.get('xesam:title'), 's')
                 url = safe_get_dbus_value(metadata.get('xesam:url'), 's')
-                self.on_filename_change(sender, title, url)
+                length_us = safe_get_dbus_value(metadata.get('mpris:length'), 'x')
+                length = int(length_us) // 1000 if length_us else None
+                self.on_filename_change(sender, title, url, length)
         except TypeError as e:
             self.msg.warn(f"Failed to read properties for {sender}: {e}")
 
@@ -306,12 +308,18 @@ class MprisTracker(tracker.TrackerBase):
         player.playback_status = playback_status
         self._handle_player_update(player)
 
-    def on_filename_change(self, sender, title, url):
+    def on_filename_change(self, sender, title, url, length=None):
         player = self.players.get(sender)
         if not player:
             return
         player.title = title
         player.url = url
+        # `length` is None both when the metadata genuinely doesn't carry
+        # a duration and when this is called without one (e.g. tests) --
+        # in the latter case keep whatever the player already reported
+        # rather than clobbering a known-good value.
+        if length is not None:
+            player.length = length
         self._handle_player_update(player)
 
     def _handle_player_update(self, player):
