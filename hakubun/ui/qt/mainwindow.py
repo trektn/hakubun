@@ -726,7 +726,7 @@ class MainWindow(QMainWindow):
         self._apply_tray()
         self._apply_filter_bar()
         # TODO: Reload listviews?
-        if self.config['sync_on_settings_apply']:
+        if self.worker.engine.get_config('sync_on_settings_apply'):
             self.s_send(False)
 
     def _apply_view(self):
