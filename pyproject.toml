@@ -1,6 +1,6 @@
 [project]
 name = "hakubun"
-version = "0.15"
+version = "0.12.3"
 description = "Open multi-site list manager for Unix-like systems (independent fork of Trackma)"
 authors = [{ name = "trektn", email = "trekt@poopf.art" }]
 requires-python = ">=3.9,<4"
