@@ -53,6 +53,13 @@ class AnitopyWrapper():
         # string (it often doesn't -- see __extractEpisodeNumber).
         self.token_episode = None
 
+        # Defaults so these attributes always exist -- getName()/getEpisode()
+        # are called unconditionally by callers, and Anitopy can raise on
+        # some filenames (see below). An empty parse leaves them as-is,
+        # which the extractors treat as "unrecognized".
+        self.episode_number = None
+        self.anime_title = None
+
         file_name = self.__preProcessFileName(file_name)
         file_name = self.__trimFileName(file_name)
         self.file_name = file_name
@@ -60,11 +67,15 @@ class AnitopyWrapper():
         try:
             self.msg.debug(f"Parsing {file_name}")
             data = anitopy.parse(file_name)
-        except Exception:
-            # If Anitopy crashes while parsing a filename, print the traceback
-            # instead of crashing Hakubun altogether.
+        except Exception as e:
+            # Anitopy itself crashes on certain filenames (e.g. an sXXeYY
+            # name whose episode token is the last one). Treat the file as
+            # unrecognized rather than aborting the whole library scan;
+            # falls through with data = {}. The full traceback is kept at
+            # debug level for diagnosing the underlying Anitopy bug.
             import traceback
-            traceback.print_exc()
+            self.msg.warn(f"Anitopy failed to parse '{self.original_file_name}': {e}")
+            self.msg.debug(traceback.format_exc())
             data = {}
 
         self.episode_number = self.__extractEpisodeNumber(data)

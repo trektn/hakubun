@@ -90,6 +90,12 @@ class PlaybackBar(QWidget):
             percent = min(100, round(offset / length * 100))
             self.bar.setValue(percent)
             self.percent_label.setText('%d%%' % percent)
+        else:
+            self.bar.setValue(0)
+            self.percent_label.setText('')
+
+    def clear(self):
+        self.update_status({'state': None})
 
 
 class DetailsWidget(QWidget):
