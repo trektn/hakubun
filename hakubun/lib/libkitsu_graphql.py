@@ -128,7 +128,7 @@ class libkitsu_graphql(lib):
     _client_id = 'dd031b32d2f56c990b1425efe6c42ad847e7fe3ab46bf1299f05ecd856bdb7dd'
     _client_secret = '54d7307928f63414defd96399fc31ba847961ceaecef3a5fd93144e960c0e151'
 
-    # Kitsu media subtype -> trackma Type. GraphQL returns these uppercase.
+    # Kitsu media subtype -> Hakubun Type. GraphQL returns these uppercase.
     type_translate = {
         'TV': utils.Type.TV,
         'ONA': utils.Type.ONA,
@@ -138,7 +138,7 @@ class libkitsu_graphql(lib):
         'SPECIAL': utils.Type.SP,
     }
 
-    # Kitsu ReleaseStatusEnum -> trackma Status.
+    # Kitsu ReleaseStatusEnum -> Hakubun Status.
     status_translate = {
         'CURRENT': utils.Status.AIRING,
         'FINISHED': utils.Status.FINISHED,
@@ -161,13 +161,34 @@ class libkitsu_graphql(lib):
       ageRating
       ageRatingGuide
       tba
-      titles { canonical preferred romanized }
+      # `alternatives` is declared non-null in Kitsu's schema but their
+      # server actually returns null for it on some shows -- which,
+      # since it's non-null, nullifies the *entire* bulk response
+      # instead of just that field. Left out until/unless Kitsu fixes
+      # that; `translated` alone (genuinely nullable) already covers
+      # the actual gap (an English title to match against).
+      titles { canonical preferred romanized translated }
       posterImage { views { name url } }
     '''
 
     _MEDIA_DETAIL_FIELDS = '''
       description(locales: ["en", "en_us", "en_jp"])
     '''
+
+    # Genre (category) and studio (production) data for the details view.
+    # Only requested through findById (request_info), never in the
+    # paginated library download where response size matters. Kept behind
+    # a runtime fallback (see request_info) so an unexpected schema change
+    # degrades the details view instead of breaking it. Category.title is
+    # a locale->string map; MediaProduction.role is one of PRODUCER,
+    # LICENSOR, STUDIO, SERIALIZATION.
+    _MEDIA_EXTRA_FIELDS = '''
+      categories(first: 20) { nodes { title(locales: ["en"]) } }
+      productions(first: 20) { nodes { role company { name } } }
+    '''
+    # Flipped off for the session the first time Kitsu rejects the extra
+    # selections above, so we stop paying the failed round-trip.
+    _details_enriched = True
 
     def _media_fields(self, concrete=None, include_description=True):
         """Returns the media field selection. When the field returns the
@@ -412,21 +433,35 @@ class libkitsu_graphql(lib):
         # fetch independent IDs. Keep batches small enough for query limits.
         for offset in range(0, len(item_list), 20):
             batch = item_list[offset:offset + 20]
-            variable_defs = []
-            selections = []
-            variables = {}
-            for index, item in enumerate(batch):
-                name = 'media{}'.format(index)
-                variable_defs.append('${}: ID!'.format(name))
-                selections.append(
-                    '{}: {}(id: ${}) {{ {} }}'.format(
-                        name, find_field, name,
-                        self._media_fields(self.mediatype)))
-                variables[name] = str(item['id'])
 
-            query = 'query ({}) {{ {} }}'.format(
-                ', '.join(variable_defs), ' '.join(selections))
-            data = self._gql(query, variables, auth=True)
+            def run_batch(enriched):
+                fields = self._media_fields(self.mediatype)
+                if enriched:
+                    fields += self._MEDIA_EXTRA_FIELDS
+                variable_defs = []
+                selections = []
+                variables = {}
+                for index, item in enumerate(batch):
+                    name = 'media{}'.format(index)
+                    variable_defs.append('${}: ID!'.format(name))
+                    selections.append(
+                        '{}: {}(id: ${}) {{ {} }}'.format(
+                            name, find_field, name, fields))
+                    variables[name] = str(item['id'])
+                query = 'query ({}) {{ {} }}'.format(
+                    ', '.join(variable_defs), ' '.join(selections))
+                return self._gql(query, variables, auth=True)
+
+            if self._details_enriched:
+                try:
+                    data = run_batch(True)
+                except utils.APIError as e:
+                    self.msg.warn("Kitsu rejected details enrichment (%s); "
+                                  "falling back to base fields." % e)
+                    self._details_enriched = False
+                    data = run_batch(False)
+            else:
+                data = run_batch(False)
             for index in range(len(batch)):
                 media = data.get('media{}'.format(index))
                 if media:
@@ -522,7 +557,7 @@ class libkitsu_graphql(lib):
         self._check_mutation_errors(data['libraryEntry']['delete'], 'deleting')
 
     def _apply_entry_fields(self, input_fields, item):
-        """Copies the mutable library-entry fields from a trackma item
+        """Copies the mutable library-entry fields from a Hakubun item
         into a GraphQL input dict, matching the REST backend's behaviour
         of only syncing progress/status/rating."""
         if 'my_progress' in item:
@@ -556,12 +591,51 @@ class libkitsu_graphql(lib):
     # -- Parsing helpers --------------------------------------------------
 
     def _status_from_gql(self, status):
-        # LibraryEntryStatusEnum (CURRENT, ON_HOLD, ...) -> trackma's
+        # LibraryEntryStatusEnum (CURRENT, ON_HOLD, ...) -> Hakubun's
         # lowercase status keys (current, on_hold, ...).
         return status.lower()
 
     def _status_to_gql(self, status):
         return status.upper()
+
+    @staticmethod
+    def _category_titles(categories):
+        # Category.title is a locale->string map, e.g. {"en": "Action"};
+        # prefer English, fall back to whatever locale is present.
+        nodes = (categories or {}).get('nodes') or []
+        names = []
+        for node in nodes:
+            title = node.get('title') or {}
+            name = title.get('en') or next(iter(title.values()), None)
+            if name:
+                names.append(name)
+        return names
+
+    @staticmethod
+    def _production_studios(productions):
+        # MediaProduction.role is one of PRODUCER/LICENSOR/STUDIO/
+        # SERIALIZATION; only STUDIO entries are the animation studios.
+        nodes = (productions or {}).get('nodes') or []
+        return [n['company']['name'] for n in nodes
+                if n.get('role') == 'STUDIO' and n.get('company')]
+
+    @staticmethod
+    def _season_from_date(start_date):
+        # Kitsu has no seasonal-anime field, so derive the standard airing
+        # season (Winter/Spring/Summer/Fall) from the start month, matching
+        # how AniList labels it. start_date is an ISO 'YYYY-MM-DD' string.
+        if not start_date:
+            return None
+        try:
+            parts = start_date.split('-')
+            year, month = parts[0], int(parts[1])
+        except (ValueError, IndexError, AttributeError):
+            return None
+        season = {1: 'Winter', 2: 'Winter', 3: 'Winter',
+                  4: 'Spring', 5: 'Spring', 6: 'Spring',
+                  7: 'Summer', 8: 'Summer', 9: 'Summer',
+                  10: 'Fall', 11: 'Fall', 12: 'Fall'}.get(month)
+        return '%s %s' % (season, year) if season else year
 
     def _parse_info(self, media, partial=False):
         info = utils.show()
@@ -573,10 +647,17 @@ class libkitsu_graphql(lib):
         title = (titles.get('canonical') or titles.get('preferred')
                  or titles.get('romanized') or '')
 
+        # canonical/preferred/romanized are frequently all the same
+        # Japanese romanization (e.g. "Kusuriya no Hitorigoto 2nd
+        # Season") with no English title anywhere among them -- without
+        # `translated`, the tracker can never match a release using the
+        # English title, which is what most fansub/encode groups
+        # actually name files.
         aliases = list(filter(None, [
             titles.get('canonical'),
             titles.get('preferred'),
             titles.get('romanized'),
+            titles.get('translated'),
         ]))
         # De-duplicate while preserving order.
         aliases = list(dict.fromkeys(aliases))
@@ -589,6 +670,30 @@ class libkitsu_graphql(lib):
         description = utils.clean_synopsis(
             self._pick_description(media.get('description')))
         average = media.get('averageRating')
+        status = self.status_translate.get(
+            media.get('status'), utils.Status.UNKNOWN)
+
+        # Mirror AniList's details layout. Kitsu's title fields don't map
+        # cleanly to English/Romaji/Japanese, but `translated` is the
+        # English title and `romanized` (or canonical) the romaji; the rest
+        # become synonyms. Genres/studios come from the enriched detail
+        # request (categories/productions) and are simply absent -- and so
+        # filtered out of the view -- on bulk/search entries.
+        english = titles.get('translated')
+        romaji = titles.get('romanized') or titles.get('canonical')
+        shown = set(filter(None, (title, english, romaji)))
+        synonyms = [a for a in aliases if a not in shown]
+
+        genres = self._category_titles(media.get('categories'))
+        studios = self._production_studios(media.get('productions'))
+        season = self._season_from_date(media.get('startDate'))
+        platform_score = '%.0f%%' % float(average) if average else None
+
+        age_rating = None
+        if media.get('ageRating'):
+            guide = media.get('ageRatingGuide')
+            age_rating = ('%s (%s)' % (media['ageRating'], guide)
+                          if guide else media['ageRating'])
 
         info.update({
             'id':          int(media['id']),
@@ -600,21 +705,23 @@ class libkitsu_graphql(lib):
             'end_date':    self._str2date(media.get('endDate')),
             'type':        self.type_translate.get(
                 (subtype or '').upper(), utils.Type.UNKNOWN),
-            'status':      self.status_translate.get(
-                media.get('status'), utils.Status.UNKNOWN),
-            'platform_score': (
-                '%.0f%%' % float(average) if average else None),
+            'status':      status,
+            'platform_score': platform_score,
             'url': "https://kitsu.app/{}/{}".format(
                 self.mediatype, media.get('slug')),
             'aliases':     aliases,
             'extra': [
-                ('Synopsis',        description),
-                ('Type',            subtype),
-                ('Titles',          aliases),
-                ('Average Rating',  average),
-                ('Age Rating',      "{} ({})".format(
-                    media.get('ageRating', 'Unknown'),
-                    media.get('ageRatingGuide', 'Unknown'))),
+                ('English',     english),
+                ('Romaji',      romaji),
+                ('Synonyms',    synonyms),
+                ('Season',      season),
+                ('Genres',      genres),
+                ('Studios',     studios),
+                ('Synopsis',    description),
+                ('Type',        subtype),
+                ('Score',       platform_score),
+                ('Age Rating',  age_rating),
+                ('Status',      status),
             ],
         })
 
