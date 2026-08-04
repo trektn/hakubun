@@ -26,6 +26,7 @@ from hakubun.engine import Engine
 from hakubun.ui.gtk import gtk_dir
 from hakubun.ui.gtk.accountswindow import AccountsWindow
 from hakubun.ui.gtk.mainview import MainView
+from hakubun.ui.gtk.nowplayingview import NowPlayingView
 from hakubun.ui.gtk.searchwindow import SearchWindow
 from hakubun.ui.gtk.settingswindow import SettingsWindow
 from hakubun.ui.gtk.showeventtype import ShowEventType
@@ -39,6 +40,7 @@ class HakubunWindow(Gtk.ApplicationWindow):
 
     btn_appmenu = Gtk.Template.Child()
     btn_search = Gtk.Template.Child()
+    btn_now_playing = Gtk.Template.Child()
     mediatype_box = Gtk.Template.Child()
     header_bar = Gtk.Template.Child()
 
@@ -108,11 +110,23 @@ class HakubunWindow(Gtk.ApplicationWindow):
             self.search_bar.connect_entry(self.search_entry)
             self.search_entry.connect('search-changed', self._on_search_changed)
 
+            self._now_playing_view = NowPlayingView()
+            self._now_playing_view.connect(
+                'play-episode', self._on_now_playing_play_episode)
+            self._now_playing_view.connect(
+                'play-random', lambda *_a: self._play_random())
+
+            self._content_stack = Gtk.Stack()
+            self._content_stack.add_named(self._main_view, 'list')
+            self._content_stack.add_named(self._now_playing_view, 'now_playing')
+
             content_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
             content_box.pack_start(self.search_bar, False, False, 0)
-            content_box.pack_start(self._main_view, True, True, 0)
+            content_box.pack_start(self._content_stack, True, True, 0)
             content_box.show_all()
             self.add(content_box)
+
+            self.btn_now_playing.connect('toggled', self._on_now_playing_toggled)
 
         self.connect('delete_event', self._on_delete_event)
         self.connect('key-press-event', self._on_key_press)
@@ -201,7 +215,13 @@ class HakubunWindow(Gtk.ApplicationWindow):
         self._engine = Engine(account, self._message_handler)
         self._engine.connect_signal(
             'undo_stack_changed', self._on_undo_stack_changed)
+        # Fires from the tracker's own background thread -- GTK widgets
+        # can only be touched from the main thread, hence idle_add.
+        self._engine.connect_signal(
+            'tracker_state',
+            lambda status: GLib.idle_add(self._on_tracker_state, status))
 
+        self._now_playing_view.set_engine(self._engine)
         self._main_view.load_engine_account(self._engine, account)
         self._set_actions()
         self._set_mediatypes_buttons()
@@ -347,6 +367,16 @@ class HakubunWindow(Gtk.ApplicationWindow):
     def _update_undo_redo_sensitivity(self):
         self.action_undo.set_enabled(self._engine.can_undo())
         self.action_redo.set_enabled(self._engine.can_redo())
+
+    def _on_now_playing_toggled(self, button):
+        self._content_stack.set_visible_child_name(
+            'now_playing' if button.get_active() else 'list')
+
+    def _on_tracker_state(self, status):
+        self._now_playing_view.update_status(status)
+
+    def _on_now_playing_play_episode(self, _view, show_id, episode):
+        self._play_episode(show_id, episode)
 
     def _on_download(self, action, param):
         def _download_lists():
