@@ -425,7 +425,7 @@ class libmal(lib):
 
         try:
             return datetime.datetime.strptime(string, "%Y-%m-%d")
-        except Exception:
+        except (ValueError, TypeError):
             self.msg.debug('Invalid date {}'.format(string))
             return None  # Ignore date if it's invalid
 
@@ -435,6 +435,6 @@ class libmal(lib):
 
         try:
             return datetime.datetime.fromisoformat(string).replace(tzinfo=datetime.timezone.utc)
-        except Exception:
+        except (ValueError, TypeError):
             self.msg.debug('Invalid date {}'.format(string))
             return None  # Ignore date if it's invalid
