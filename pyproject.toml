@@ -55,7 +55,7 @@ trackers = [
 ]
 discord_rpc = ["pypresence>=4.2.1,<5"]
 anitopy = ["anitopy>=2.0.0,<3"]
-anitomy_ng = ["anitomy-ng>=1.0.8,<2"]
+anitomy_ng = ["anitomy-ng>=1.0.9,<2"]
 fuzzy = ["rapidfuzz>=3.0.0,<4"]
 
 [project.urls]
