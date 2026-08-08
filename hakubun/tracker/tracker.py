@@ -96,6 +96,7 @@ class TrackerBase(object):
         return {
             'state': self.last_state,
             'timer': self.timer,
+            'wait_s': self.wait_s or self.config['tracker_update_wait_s'],
             'viewOffset': self.view_offset,
             'length': self.length,
             'paused': bool(self.timer_paused),

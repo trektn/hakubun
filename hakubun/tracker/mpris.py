@@ -382,6 +382,7 @@ class MprisTracker(tracker.TrackerBase):
             self.msg.debug(f"Clearing active player: {self.active_player.wellknown_name}")
         self.active_player = None
         self.view_offset = None
+        self.length = None
 
         if not self.find_playing_player():
             (state, show_tuple) = self._get_playing_show(None)
@@ -389,14 +390,16 @@ class MprisTracker(tracker.TrackerBase):
             self._stop_timer()
 
     def _percentage_wait_s(self, player):
-        # 80% of the episode's actual duration, like Plex/Kodi's own
-        # obey_update_wait_s toggles -- roughly the runtime minus OP/ED.
-        # Falls back to the fixed tracker_update_wait_s (returning None,
-        # which update_timer() treats the same way) if the player hasn't
-        # reported a duration, e.g. right when playback starts.
+        # tracker_update_percentage% of the episode's actual duration,
+        # like Plex/Kodi's own obey_update_wait_s toggles -- roughly the
+        # runtime minus OP/ED at the default 80%. Falls back to the fixed
+        # tracker_update_wait_s (returning None, which update_timer()
+        # treats the same way) if the player hasn't reported a duration
+        # yet, e.g. right when playback starts.
         if self.config['mpris_obey_update_wait_s'] or not player.length:
             return None
-        target_s = (player.length / 1000) * 0.80
+        fraction = self.config['tracker_update_percentage'] / 100.0
+        target_s = (player.length / 1000) * fraction
         if self.view_offset is not None:
             # Anchor to the actual playback position (view_offset, ms):
             # resuming an episode mid-way or seeking shouldn't restart
@@ -433,6 +436,11 @@ class MprisTracker(tracker.TrackerBase):
                 self.view_offset = None
                 # The view_offset is not important, so we ignore errors.
                 pass
+
+            # Without this the UI has a playback position but no
+            # duration to divide it by, so the progress bar can never
+            # show a percentage no matter how well tracking works.
+            self.length = self.active_player.length
 
             # Recompute every tick: the player may not have reported a
             # duration yet right when playback started (mpris:length
