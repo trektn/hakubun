@@ -91,9 +91,22 @@ class SettingsDialog(QDialog):
         self.tracker_update_close = QCheckBox()
         self.mpris_obey_update_wait = QCheckBox()
         self.mpris_obey_update_wait.setToolTip(
-            "When unchecked (MPRIS tracker only), updates at 80% of the "
-            "episode's actual duration -- reported by the player -- "
-            "instead of the fixed wait time above.")
+            "When unchecked (MPRIS tracker only), updates at the "
+            "percentage below of the episode's actual duration -- "
+            "reported by the player -- instead of the fixed wait time "
+            "above.")
+        self.tracker_update_percentage = QSpinBox()
+        # Below ~5% every episode would update the instant it opens; 100%
+        # means the very last frame, which players rarely report exactly.
+        self.tracker_update_percentage.setRange(5, 100)
+        self.tracker_update_percentage.setMaximumWidth(60)
+        self.tracker_update_percentage.setToolTip(
+            "How far into an episode counts as watched, when the fixed "
+            "wait above is disabled for MPRIS. The default 80% is "
+            "roughly the runtime minus the OP/ED.")
+        # The percentage is only consulted when the fixed wait is off.
+        self.mpris_obey_update_wait.toggled.connect(
+            lambda obey: self.tracker_update_percentage.setEnabled(not obey))
         self.tracker_update_prompt = QCheckBox()
         self.tracker_not_found_prompt = QCheckBox()
         self.tracker_ignore_not_next = QCheckBox()
@@ -121,6 +134,9 @@ class SettingsDialog(QDialog):
             self.streaming_obey_wait)
         g_media_layout.addRow(
             'Use fixed wait above (MPRIS)', self.mpris_obey_update_wait)
+        g_media_layout.addRow(
+            'Update at this % of the episode (MPRIS)',
+            self.tracker_update_percentage)
         g_media_layout.addRow(
             'Wait until the player is closed', self.tracker_update_close)
         g_media_layout.addRow('Ask before updating',
@@ -610,6 +626,10 @@ class SettingsDialog(QDialog):
             engine.get_config('tracker_update_wait_s'))
         self.mpris_obey_update_wait.setChecked(
             engine.get_config('mpris_obey_update_wait_s'))
+        self.tracker_update_percentage.setValue(
+            engine.get_config('tracker_update_percentage'))
+        self.tracker_update_percentage.setEnabled(
+            not engine.get_config('mpris_obey_update_wait_s'))
         self.tracker_update_close.setChecked(
             engine.get_config('tracker_update_close'))
         self.tracker_update_prompt.setChecked(
@@ -730,6 +750,8 @@ class SettingsDialog(QDialog):
                           self.tracker_update_wait.value())
         engine.set_config('mpris_obey_update_wait_s',
                           self.mpris_obey_update_wait.isChecked())
+        engine.set_config('tracker_update_percentage',
+                          self.tracker_update_percentage.value())
         engine.set_config('tracker_update_close',
                           self.tracker_update_close.isChecked())
         engine.set_config('tracker_update_prompt',

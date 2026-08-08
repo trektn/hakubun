@@ -733,6 +733,9 @@ config_defaults = {
     # own obey_update_wait_s toggles, which do the same thing for their
     # own duration sources.
     'mpris_obey_update_wait_s': True,
+    # How far into an episode (MPRIS-reported duration) counts as
+    # "watched", when the toggle above is off.
+    'tracker_update_percentage': 80,
     'tracker_update_close': False,
     'tracker_update_prompt': False,
     'tracker_not_found_prompt': False,

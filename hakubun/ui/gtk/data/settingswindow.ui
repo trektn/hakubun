@@ -36,6 +36,13 @@
     <property name="step_increment">1</property>
     <property name="page_increment">10</property>
   </object>
+  <object class="GtkAdjustment" id="adjustment_tracker_update_percentage">
+    <property name="lower">5</property>
+    <property name="upper">100</property>
+    <property name="value">80</property>
+    <property name="step_increment">1</property>
+    <property name="page_increment">10</property>
+  </object>
   <object class="GtkAdjustment" id="adjustment_upload_minutes">
     <property name="lower">1</property>
     <property name="upper">1000</property>
@@ -540,7 +547,7 @@
                             <child>
                               <object class="GtkCheckButton" id="checkbox_mpris_obey_update_wait">
                                 <property name="label" translatable="yes">Use fixed wait above (MPRIS)</property>
-                                <property name="tooltip_text" translatable="yes">When unchecked (MPRIS tracker only), updates at 80% of the episode's actual duration -- reported by the player -- instead of the fixed wait time above.</property>
+                                <property name="tooltip_text" translatable="yes">When unchecked (MPRIS tracker only), updates at the percentage below of the episode's actual duration -- reported by the player -- instead of the fixed wait time above.</property>
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
                                 <property name="receives_default">False</property>
@@ -550,6 +557,58 @@
                                 <property name="expand">False</property>
                                 <property name="fill">True</property>
                                 <property name="position">2</property>
+                              </packing>
+                            </child>
+                            <child>
+                              <object class="GtkBox" id="box_tracker_update_percentage">
+                                <property name="visible">True</property>
+                                <property name="can_focus">False</property>
+                                <property name="spacing">9</property>
+                                <property name="tooltip_text" translatable="yes">How far into an episode counts as watched, when the fixed wait above is disabled for MPRIS. The default 80% is roughly the runtime minus the OP/ED.</property>
+                                <child>
+                                  <object class="GtkLabel">
+                                    <property name="visible">True</property>
+                                    <property name="can_focus">False</property>
+                                    <property name="label" translatable="yes">Or update at</property>
+                                  </object>
+                                  <packing>
+                                    <property name="expand">False</property>
+                                    <property name="fill">True</property>
+                                    <property name="position">0</property>
+                                  </packing>
+                                </child>
+                                <child>
+                                  <object class="GtkSpinButton" id="spin_tracker_update_percentage">
+                                    <property name="visible">True</property>
+                                    <property name="can_focus">True</property>
+                                    <property name="text" translatable="yes">80</property>
+                                    <property name="adjustment">adjustment_tracker_update_percentage</property>
+                                    <property name="value">80</property>
+                                  </object>
+                                  <packing>
+                                    <property name="expand">False</property>
+                                    <property name="fill">True</property>
+                                    <property name="position">1</property>
+                                  </packing>
+                                </child>
+                                <child>
+                                  <object class="GtkLabel">
+                                    <property name="visible">True</property>
+                                    <property name="can_focus">False</property>
+                                    <property name="label" translatable="yes">% of the episode (MPRIS)</property>
+                                    <property name="xalign">0</property>
+                                  </object>
+                                  <packing>
+                                    <property name="expand">False</property>
+                                    <property name="fill">True</property>
+                                    <property name="position">2</property>
+                                  </packing>
+                                </child>
+                              </object>
+                              <packing>
+                                <property name="expand">False</property>
+                                <property name="fill">True</property>
+                                <property name="position">3</property>
                               </packing>
                             </child>
                             <child>
@@ -563,7 +622,7 @@
                               <packing>
                                 <property name="expand">False</property>
                                 <property name="fill">True</property>
-                                <property name="position">3</property>
+                                <property name="position">4</property>
                               </packing>
                             </child>
                             <child>
@@ -577,7 +636,7 @@
                               <packing>
                                 <property name="expand">False</property>
                                 <property name="fill">True</property>
-                                <property name="position">4</property>
+                                <property name="position">5</property>
                               </packing>
                             </child>
                             <child>
@@ -591,7 +650,7 @@
                               <packing>
                                 <property name="expand">False</property>
                                 <property name="fill">True</property>
-                                <property name="position">5</property>
+                                <property name="position">6</property>
                               </packing>
                             </child>
                           </object>

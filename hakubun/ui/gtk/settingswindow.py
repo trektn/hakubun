@@ -85,6 +85,8 @@ class SettingsWindow(Gtk.Window):
     entry_kodi_password = Gtk.Template.Child()
 
     checkbox_mpris_obey_update_wait = Gtk.Template.Child()
+    spin_tracker_update_percentage = Gtk.Template.Child()
+    box_tracker_update_percentage = Gtk.Template.Child()
     checkbox_tracker_update_close = Gtk.Template.Child()
     checkbox_tracker_update_prompt = Gtk.Template.Child()
     checkbox_tracker_not_found_prompt = Gtk.Template.Child()
@@ -240,6 +242,13 @@ class SettingsWindow(Gtk.Window):
             self.engine.get_config('tracker_update_wait_s'))
         self.checkbox_mpris_obey_update_wait.set_active(
             self.engine.get_config('mpris_obey_update_wait_s'))
+        self.spin_tracker_update_percentage.set_value(
+            self.engine.get_config('tracker_update_percentage'))
+        # The percentage is only consulted when the fixed wait is off.
+        self.checkbox_mpris_obey_update_wait.connect(
+            'toggled', self._on_mpris_obey_update_wait_toggled)
+        self._on_mpris_obey_update_wait_toggled(
+            self.checkbox_mpris_obey_update_wait)
         self.checkbox_tracker_update_close.set_active(
             self.engine.get_config('tracker_update_close'))
         self.checkbox_tracker_update_prompt.set_active(
@@ -415,6 +424,10 @@ class SettingsWindow(Gtk.Window):
         elif self.radio_tracker_kodi.get_active():
             self._kodi_obey_wait = checkbox.get_active()
 
+    def _on_mpris_obey_update_wait_toggled(self, checkbox):
+        self.box_tracker_update_percentage.set_sensitive(
+            not checkbox.get_active())
+
     def _load_directories(self, paths):
         if isinstance(paths, str):
             paths = [paths]
@@ -490,6 +503,8 @@ class SettingsWindow(Gtk.Window):
                                self.spin_tracker_update_wait.get_value_as_int())
         self.engine.set_config('mpris_obey_update_wait_s',
                                self.checkbox_mpris_obey_update_wait.get_active())
+        self.engine.set_config('tracker_update_percentage',
+                               self.spin_tracker_update_percentage.get_value_as_int())
         self.engine.set_config('tracker_update_close',
                                self.checkbox_tracker_update_close.get_active())
         self.engine.set_config('tracker_update_prompt',

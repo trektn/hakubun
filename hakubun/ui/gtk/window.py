@@ -508,7 +508,8 @@ class HakubunWindow(Gtk.ApplicationWindow):
         about.set_authors(["See AUTHORS file"])
         about.add_credit_section(
             "Filename parsing",
-            ["Anitopy (MPL-2.0) https://github.com/igorcmoura/anitopy"])
+            ["Anitopy (MPL-2.0) https://github.com/igorcmoura/anitopy",
+             "anitomy-ng (MPL-2.0) https://github.com/tylergibbs2/anitomy-ng"])
         about.add_credit_section(
             "Fuzzy title matching (optional)",
             ["RapidFuzz (MIT) https://github.com/rapidfuzz/RapidFuzz"])
